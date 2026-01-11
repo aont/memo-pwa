@@ -1,9 +1,11 @@
-import { debounce, nowIso, uid } from "./modules/utils.js";
+import { debounce } from "./modules/utils.js";
 import { createLogger } from "./modules/logger.js";
 import { createHistoryStore } from "./modules/history.js";
 import { createSearchController } from "./modules/search.js";
 import { STORAGE_KEYS, loadNotes, loadPreferences, saveNotes, savePreference } from "./modules/storage.js";
 import { setupPwa } from "./modules/pwa.js";
+import { createNotesController } from "./modules/notes.js";
+import { createImportExportController } from "./modules/importExport.js";
 
 (() => {
   // =========================
@@ -80,8 +82,10 @@ import { setupPwa } from "./modules/pwa.js";
   // DB
   // =========================
   const loadResult = loadNotes({ log, warn });
-  let db = loadResult.db;
-  let currentId = loadResult.currentId;
+  const state = {
+    db: loadResult.db,
+    currentId: loadResult.currentId
+  };
 
   // =========================
   // Search/Highlight
@@ -143,238 +147,57 @@ import { setupPwa } from "./modules/pwa.js";
   }
 
   // =========================
-  // Notes helpers
+  // Persistence
   // =========================
-  function sortNotes() {
-    db.notes.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-  }
-
-  function ensureAtLeastOneNote() {
-    if (db.notes.length) return;
-    const id = uid();
-    db.notes.push({ id, title: "New Memo", text: "", createdAt: nowIso(), updatedAt: nowIso() });
-    currentId = id;
-  }
-
-  function getNoteById(id) {
-    return db.notes.find((n) => n.id === id);
-  }
-
-  function updateCurrentNoteTextFromEditor(silent = false) {
-    const note = getNoteById(currentId);
-    if (!note) return;
-    note.text = editor.value;
-    note.updatedAt = nowIso();
-    if (!silent) log("updateCurrentNoteTextFromEditor()", { noteId: currentId });
-  }
-
-  function refreshNoteSelect() {
-    sortNotes();
-    noteSelect.innerHTML = "";
-    for (const note of db.notes) {
-      const opt = document.createElement("option");
-      opt.value = note.id;
-      opt.textContent = note.title || "Untitled";
-      noteSelect.appendChild(opt);
-    }
-    noteSelect.value = currentId;
-  }
-
-  function loadCurrentNoteToEditor() {
-    const note = getNoteById(currentId);
-    if (!note) return;
-    editor.value = note.text || "";
-    currentTitle.textContent = note.title || "Untitled";
-    search.scheduleHighlight(true);
-    search.syncScroll();
+  const persistNow = () => {
+    saveNotes(state.db, state.currentId);
     setSavedState("Saved");
+    log("persistNow()", { notes: state.db.notes.length, currentId: state.currentId });
+  };
+  const schedulePersist = debounce(persistNow, 800);
 
-    const snap = history.snapshotFromEditor(editor);
-    history.resetHistory(currentId, snap);
-  }
-
-  function createNote() {
-    updateCurrentNoteTextFromEditor();
-    const id = uid();
-    const note = { id, title: "New Memo", text: "", createdAt: nowIso(), updatedAt: nowIso() };
-    db.notes.unshift(note);
-    currentId = id;
-    refreshNoteSelect();
-    loadCurrentNoteToEditor();
-    setSavedState("Saving…");
-    schedulePersist();
-    log("createNote()", { noteId: id });
-  }
-
-  function switchNote(id) {
-    if (!id || id === currentId) return;
-    updateCurrentNoteTextFromEditor();
-    currentId = id;
-    localStorage.setItem(STORAGE_KEYS.current, currentId);
-    loadCurrentNoteToEditor();
-    log("switchNote()", { noteId: id });
-  }
-
-  function renameCurrent() {
-    const note = getNoteById(currentId);
-    if (!note) return;
-    const title = titleInput.value.trim() || "Untitled";
-    note.title = title;
-    note.updatedAt = nowIso();
-    currentTitle.textContent = title;
-    refreshNoteSelect();
-    setSavedState("Saving…");
-    schedulePersist();
-    log("renameCurrent()", { noteId: currentId, title });
-  }
-
-  function deleteCurrent() {
-    if (!confirm("Delete this memo?")) return;
-    const idx = db.notes.findIndex((n) => n.id === currentId);
-    if (idx === -1) return;
-    const [n] = db.notes.splice(idx, 1);
-    currentId = db.notes[Math.max(0, idx - 1)]?.id || db.notes[0]?.id || null;
-
-    refreshNoteSelect();
-    if (currentId) {
-      loadCurrentNoteToEditor();
-    } else {
-      editor.value = "";
-      currentTitle.textContent = "—";
-      setSavedState("Saved");
-    }
-
-    setSavedState("Saving…");
-    schedulePersist();
-    log("deleteCurrent()", { deletedId: n?.id, remaining: db.notes.length });
-  }
+  // =========================
+  // Notes
+  // =========================
+  const {
+    ensureAtLeastOneNote,
+    getNoteById,
+    updateCurrentNoteTextFromEditor,
+    refreshNoteSelect,
+    loadCurrentNoteToEditor,
+    createNote,
+    switchNote,
+    renameCurrent,
+    deleteCurrent
+  } = createNotesController({
+    state,
+    editor,
+    currentTitle,
+    noteSelect,
+    history,
+    search,
+    setSavedState,
+    schedulePersist,
+    log
+  });
 
   // =========================
   // Export / Import
   // =========================
-  function buildExportPayload(mode) {
-    const notes = mode === "all" ? db.notes : db.notes.filter((n) => n.id === currentId);
-
-    return {
-      app: "memo-pwa",
-      schema: 1,
-      exportedAt: nowIso(),
-      notes: notes.map((n) => ({
-        id: n.id,
-        title: n.title,
-        text: n.text,
-        createdAt: n.createdAt,
-        updatedAt: n.updatedAt
-      }))
-    };
-  }
-
-  function downloadJson(obj, filename) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  function exportSelected() {
-    updateCurrentNoteTextFromEditor();
-    const payload = buildExportPayload("selected");
-    const safeTitle = (getNoteById(currentId)?.title || "memo")
-      .replace(/[\\/:*?"<>|]/g, "_")
-      .slice(0, 40);
-    downloadJson(payload, `memo_selected_${safeTitle}.json`);
-    log("exportSelected()", { notes: payload.notes.length });
-  }
-
-  function exportAll() {
-    updateCurrentNoteTextFromEditor();
-    const payload = buildExportPayload("all");
-    downloadJson(payload, `memo_all_${new Date().toISOString().slice(0, 10)}.json`);
-    log("exportAll()", { notes: payload.notes.length });
-  }
-
-  function normalizeImportedNote(n) {
-    const title = (n?.title ?? "Untitled").toString();
-    const text = (n?.text ?? "").toString();
-    const createdAt = n?.createdAt && typeof n.createdAt === "string" ? n.createdAt : nowIso();
-    const updatedAt = n?.updatedAt && typeof n.updatedAt === "string" ? n.updatedAt : nowIso();
-    return { title, text, createdAt, updatedAt };
-  }
-
-  function importPayload(payload) {
-    if (!payload || !Array.isArray(payload.notes)) {
-      alert("Invalid import format (missing notes array).");
-      warn("importPayload(): invalid format");
-      return;
-    }
-
-    updateCurrentNoteTextFromEditor();
-    const existingIds = new Set(db.notes.map((n) => n.id));
-
-    let imported = 0;
-    let lastImportedId = null;
-
-    for (const item of payload.notes) {
-      const normalized = normalizeImportedNote(item);
-      let id = item?.id && typeof item.id === "string" ? item.id : uid();
-      if (existingIds.has(id)) id = uid();
-
-      db.notes.push({
-        id,
-        title: normalized.title,
-        text: normalized.text,
-        createdAt: normalized.createdAt,
-        updatedAt: normalized.updatedAt
-      });
-      existingIds.add(id);
-      imported += 1;
-      lastImportedId = id;
-
-      const h = history.getHistory(id);
-      h.undo = [{ text: normalized.text, selStart: 0, selEnd: 0 }];
-      h.redo = [];
-    }
-
-    if (imported === 0) {
-      alert("No memos were imported.");
-      return;
-    }
-
-    currentId = lastImportedId;
-    refreshNoteSelect();
-    loadCurrentNoteToEditor();
-    setSavedState("Saving…");
-    schedulePersist();
-
-    log("importPayload()", { imported, currentId });
-    alert(`Imported ${imported} memo(s).`);
-  }
-
-  async function importFromFile(file) {
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      importPayload(payload);
-    } catch (e) {
-      err("importFromFile failed", { message: e?.message });
-      alert("Import failed. Please check the JSON format.");
-    }
-  }
-
-  // =========================
-  // Persistence
-  // =========================
-  const persistNow = () => {
-    saveNotes(db, currentId);
-    setSavedState("Saved");
-    log("persistNow()", { notes: db.notes.length, currentId });
-  };
-  const schedulePersist = debounce(persistNow, 800);
+  const { exportSelected, exportAll, importFromFile } = createImportExportController({
+    state,
+    editor,
+    getNoteById,
+    updateCurrentNoteTextFromEditor,
+    refreshNoteSelect,
+    loadCurrentNoteToEditor,
+    setSavedState,
+    schedulePersist,
+    log,
+    warn,
+    err,
+    history
+  });
 
   // =========================
   // Dialog helpers
@@ -457,28 +280,28 @@ import { setupPwa } from "./modules/pwa.js";
   });
   mRename.addEventListener("click", () => {
     closeMenus();
-    titleInput.value = getNoteById(currentId)?.title || "";
+    titleInput.value = getNoteById(state.currentId)?.title || "";
     openOverlayById("renameOverlay");
     titleInput.focus();
   });
 
   mUndo.addEventListener("click", () => {
     closeMenus();
-    const snap = history.undo(currentId);
+    const snap = history.undo(state.currentId);
     if (!snap) return;
     applySnapshot(snap);
     updateCurrentNoteTextFromEditor(true);
     schedulePersist();
-    log("Undo", { noteId: currentId });
+    log("Undo", { noteId: state.currentId });
   });
   mRedo.addEventListener("click", () => {
     closeMenus();
-    const snap = history.redo(currentId);
+    const snap = history.redo(state.currentId);
     if (!snap) return;
     applySnapshot(snap);
     updateCurrentNoteTextFromEditor(true);
     schedulePersist();
-    log("Redo", { noteId: currentId });
+    log("Redo", { noteId: state.currentId });
   });
 
   mFind.addEventListener("click", () => {
@@ -546,7 +369,7 @@ import { setupPwa } from "./modules/pwa.js";
   });
 
   renameBtn.addEventListener("click", () => {
-    renameCurrent();
+    renameCurrent(titleInput.value);
     closeOverlayById("renameOverlay");
   });
   deleteBtn.addEventListener("click", () => {
@@ -591,7 +414,7 @@ import { setupPwa } from "./modules/pwa.js";
     schedulePersist();
     search.scheduleHighlight(true);
 
-    history.pushUndoSnapshot(currentId, history.snapshotFromEditor(editor));
+    history.pushUndoSnapshot(state.currentId, history.snapshotFromEditor(editor));
   });
 
   replaceAllBtn.addEventListener("click", () => {
@@ -618,7 +441,7 @@ import { setupPwa } from "./modules/pwa.js";
     schedulePersist();
     search.scheduleHighlight(true);
 
-    history.pushUndoSnapshot(currentId, history.snapshotFromEditor(editor));
+    history.pushUndoSnapshot(state.currentId, history.snapshotFromEditor(editor));
   });
 
   clearBtn.addEventListener("click", () => {
@@ -628,7 +451,7 @@ import { setupPwa } from "./modules/pwa.js";
     updateCurrentNoteTextFromEditor();
     schedulePersist();
     search.scheduleHighlight(true);
-    history.pushUndoSnapshot(currentId, history.snapshotFromEditor(editor));
+    history.pushUndoSnapshot(state.currentId, history.snapshotFromEditor(editor));
   });
 
   // Import file
@@ -643,7 +466,7 @@ import { setupPwa } from "./modules/pwa.js";
   // Editor input: save + history + highlight
   // =========================
   const scheduleHistory = debounce(() => {
-    history.pushUndoSnapshot(currentId, history.snapshotFromEditor(editor));
+    history.pushUndoSnapshot(state.currentId, history.snapshotFromEditor(editor));
   }, 250);
 
   editor.addEventListener("input", () => {
@@ -663,7 +486,7 @@ import { setupPwa } from "./modules/pwa.js";
 
     if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
       e.preventDefault();
-      const snap = history.undo(currentId);
+      const snap = history.undo(state.currentId);
       if (!snap) return;
       applySnapshot(snap);
       updateCurrentNoteTextFromEditor(true);
@@ -672,7 +495,7 @@ import { setupPwa } from "./modules/pwa.js";
     }
     if ((mod && e.key.toLowerCase() === "z" && e.shiftKey) || (mod && e.key.toLowerCase() === "y")) {
       e.preventDefault();
-      const snap = history.redo(currentId);
+      const snap = history.redo(state.currentId);
       if (!snap) return;
       applySnapshot(snap);
       updateCurrentNoteTextFromEditor(true);
