@@ -1,0 +1,1458 @@
+<html> 
+<head> 
+  <meta charset="utf-8" /> 
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" /> 
+  <meta name="theme-color" content="#111827" /> 
+  <title>Memo PWA (Menu)</title> 
+ 
+  <style> 
+    :root{ 
+      --bg:#0b1220; 
+      --panel:#111827; 
+      --panel2:#0f172a; 
+      --text:#e5e7eb; 
+      --muted:#94a3b8; 
+      --line:#1f2937; 
+      --accent:#60a5fa; 
+      --warn:#f59e0b; 
+      --hit:#fde047; 
+ 
+      --safe-b: env(safe-area-inset-bottom, 0px); 
+      --safe-t: env(safe-area-inset-top, 0px); 
+ 
+      --menu-h: 54px; 
+      --bottom-h: 84px;   /* ステータス/ログ最小 */ 
+      --radius: 12px; 
+      --pad: 12px; 
+      --font: 16px; 
+      --lh: 1.5; 
+    } 
+ 
+    *{ box-sizing:border-box; } 
+    html,body{ height:100%; } 
+    body{ 
+      margin:0; 
+      background:var(--bg); 
+      color:var(--text); 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; 
+      padding-top: var(--safe-t); 
+    } 
+ 
+    /* ====== Menu Bar ====== */ 
+    .menubar{ 
+      position:fixed; 
+      left:0; right:0; 
+      top: var(--safe-t); 
+      height: var(--menu-h); 
+      padding: 8px var(--pad); 
+      display:flex; 
+      align-items:center; 
+      gap:10px; 
+      background: rgba(11,18,32,0.96); 
+      border-bottom: 1px solid var(--line); 
+      z-index: 50; 
+    } 
+    .menu-group{ position:relative; } 
+    .menu-btn{ 
+      appearance:none; 
+      border:1px solid var(--line); 
+      background: var(--panel2); 
+      color: var(--text); 
+      padding: 8px 12px; 
+      border-radius: 10px; 
+      min-height: 38px; 
+      font-size: 14px; 
+    } 
+    .menu-btn:active{ transform: translateY(1px); } 
+    .menu-panel{ 
+      position:absolute; 
+      top: 44px; 
+      left: 0; 
+      width: 220px; 
+      background: rgba(17,24,39,0.98); 
+      border:1px solid var(--line); 
+      border-radius: var(--radius); 
+      padding: 6px; 
+      display:none; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35); 
+    } 
+    .menu-panel.open{ display:block; } 
+ 
+    .menu-item{ 
+      width:100%; 
+      text-align:left; 
+      appearance:none; 
+      border:0; 
+      background: transparent; 
+      color: var(--text); 
+      padding: 10px 10px; 
+      border-radius: 10px; 
+      font-size: 14px; 
+      min-height: 44px; 
+    } 
+    .menu-item:hover{ background: rgba(96,165,250,0.10); } 
+    .menu-item:active{ transform: translateY(1px); } 
+    .menu-sep{ 
+      height:1px; 
+      background: var(--line); 
+      margin: 6px 6px; 
+    } 
+ 
+    .menubar-right{ 
+      margin-left:auto; 
+      display:flex; 
+      align-items:center; 
+      gap:10px; 
+      min-width:0; 
+    } 
+    .note-title{ 
+      color: var(--muted); 
+      font-size: 12px; 
+      max-width: 40vw; 
+      overflow:hidden; 
+      text-overflow: ellipsis; 
+      white-space: nowrap; 
+    } 
+    .status{ 
+      color: var(--muted); 
+      font-size:12px; 
+      white-space:nowrap; 
+    } 
+ 
+    /* ====== Editor (highlight + textarea overlay) ====== */ 
+    .editor-wrap{ 
+      position:fixed; 
+      inset: 
+        calc(var(--menu-h) + var(--safe-t)) 
+        0 
+        calc(var(--bottom-h) + var(--safe-b)) 
+        0; 
+      padding: var(--pad); 
+    } 
+    .editor-surface{ 
+      position:relative; 
+      height:100%; 
+      border:1px solid var(--line); 
+      border-radius: var(--radius); 
+      overflow:hidden; 
+      background:#0a1020; 
+    } 
+ 
+    #highlightLayer{ 
+      position:absolute; 
+      inset:0; 
+      margin:0; 
+      padding: 14px; 
+      font-size: var(--font); 
+      line-height: var(--lh); 
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; 
+      white-space: pre-wrap; 
+      word-break: break-word; 
+      overflow:auto; 
+      color: transparent; 
+      pointer-events:none; 
+    } 
+    #highlightLayer .hit{ 
+      background: var(--hit); 
+      color: transparent; 
+      border-radius: 4px; 
+    } 
+    #highlightLayer .active{ 
+      outline: 2px solid var(--warn); 
+      outline-offset: -2px; 
+    } 
+ 
+    #editor{ 
+      position:absolute; 
+      inset:0; 
+      width:100%; 
+      height:100%; 
+      margin:0; 
+      padding: 14px; 
+      border:0; 
+      outline:none; 
+      resize:none; 
+      background: transparent; 
+      color: var(--text); 
+      font-size: var(--font); 
+      line-height: var(--lh); 
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; 
+      overflow:auto; 
+      -webkit-overflow-scrolling: touch; 
+      caret-color: var(--accent); 
+    } 
+ 
+    /* Wrap OFF */ 
+    .nowrap #highlightLayer{ 
+      white-space: pre; 
+      word-break: normal; 
+    } 
+    .nowrap #editor{ 
+      white-space: pre; 
+      word-break: normal; 
+      overflow-wrap: normal; 
+    } 
+ 
+    /* ====== Bottom mini bar (log/status) ====== */ 
+    .bottombar{ 
+      position:fixed; 
+      left:0; right:0; bottom:0; 
+      height: calc(var(--bottom-h) + var(--safe-b)); 
+      padding: 8px var(--pad) calc(8px + var(--safe-b)) var(--pad); 
+      border-top:1px solid var(--line); 
+      background: linear-gradient(180deg, rgba(11,18,32,0.2), rgba(11,18,32,0.9) 30%, rgba(11,18,32,1) 100%); 
+      z-index: 40; 
+    } 
+    .logwrap{ 
+      border:1px solid var(--line); 
+      background: #0a1020; 
+      border-radius: var(--radius); 
+      padding: 8px 10px; 
+      height: 100%; 
+      overflow:hidden; 
+    } 
+    #log{ 
+      margin:0; 
+      font-size: 12px; 
+      line-height: 1.35; 
+      color: var(--muted); 
+      max-height: 100%; 
+      overflow:auto; 
+      white-space: pre-wrap; 
+      word-break: break-word; 
+    } 
+ 
+    /* ====== Dialog ====== */ 
+    .overlay{ 
+      position:fixed; 
+      inset:0; 
+      background: rgba(0,0,0,0.55); 
+      display:none; 
+      align-items:center; 
+      justify-content:center; 
+      padding: 16px; 
+      z-index: 100; 
+    } 
+    .overlay.open{ display:flex; } 
+ 
+    .dialog{ 
+      width: min(520px, 100%); 
+      border: 1px solid var(--line); 
+      background: rgba(17,24,39,0.98); 
+      border-radius: 16px; 
+      overflow:hidden; 
+      box-shadow: 0 16px 40px rgba(0,0,0,0.45); 
+    } 
+    .dialog-header{ 
+      padding: 12px 14px; 
+      border-bottom: 1px solid var(--line); 
+      display:flex; 
+      align-items:center; 
+      justify-content:space-between; 
+      gap: 10px; 
+    } 
+    .dialog-title{ 
+      font-size: 14px; 
+      color: var(--text); 
+      font-weight: 600; 
+    } 
+    .dialog-body{ 
+      padding: 12px 14px; 
+    } 
+    .dialog-row{ 
+      display:flex; 
+      gap:10px; 
+      align-items:center; 
+      margin-bottom:10px; 
+    } 
+    .dialog-row:last-child{ margin-bottom:0; } 
+ 
+    .input{ 
+      width:100%; 
+      height:44px; 
+      border-radius: 12px; 
+      border:1px solid var(--line); 
+      background: #0a1020; 
+      color: var(--text); 
+      padding: 0 10px; 
+      font-size: 14px; 
+      outline:none; 
+      min-width:0; 
+    } 
+    .select{ 
+      width:100%; 
+      height:44px; 
+      border-radius: 12px; 
+      border:1px solid var(--line); 
+      background: #0a1020; 
+      color: var(--text); 
+      padding: 0 10px; 
+      font-size: 14px; 
+      outline:none; 
+    } 
+    .toggle{ 
+      display:flex; 
+      gap:8px; 
+      align-items:center; 
+      user-select:none; 
+      font-size: 13px; 
+      color: var(--muted); 
+      padding: 10px 12px; 
+      min-height:44px; 
+      border:1px solid var(--line); 
+      background: var(--panel); 
+      border-radius: 12px; 
+    } 
+    .toggle input{ width:18px; height:18px; } 
+ 
+    .btn{ 
+      appearance:none; 
+      border:1px solid var(--line); 
+      background: var(--panel2); 
+      color: var(--text); 
+      padding: 10px 12px; 
+      border-radius: 12px; 
+      min-height: 44px; 
+      font-size: 14px; 
+      white-space:nowrap; 
+    } 
+    .btn.primary{ border-color: rgba(96,165,250,0.5); } 
+    .btn.danger{ border-color: rgba(245,158,11,0.6); } 
+    .btn:active{ transform: translateY(1px); } 
+ 
+    .hint{ 
+      margin-top: 8px; 
+      font-size: 12px; 
+      color: var(--muted); 
+      line-height: 1.35; 
+    } 
+  </style> 
+</head> 
+<body> 
+ 
+  <!-- Menu bar --> 
+  <div class="menubar" role="navigation" aria-label="Menu Bar"> 
+    <div class="menu-group" data-menu="file"> 
+      <button class="menu-btn" id="fileBtn" aria-haspopup="true" aria-expanded="false">File</button> 
+      <div class="menu-panel" id="fileMenu" role="menu" aria-label="File menu"> 
+        <button class="menu-item" id="mNewMemo" role="menuitem">New Memo</button> 
+        <button class="menu-item" id="mOpen" role="menuitem">Open…</button> 
+        <button class="menu-item" id="mRename" role="menuitem">Rename…</button> 
+        <div class="menu-sep"></div> 
+        <button class="menu-item" id="mExportSel" role="menuitem">Export Selected…</button> 
+        <button class="menu-item" id="mExportAll" role="menuitem">Export All…</button> 
+        <button class="menu-item" id="mImport" role="menuitem">Import…</button> 
+        <div class="menu-sep"></div> 
+        <button class="menu-item" id="mDelete" role="menuitem">Delete Memo…</button> 
+      </div> 
+    </div> 
+ 
+    <div class="menu-group" data-menu="edit"> 
+      <button class="menu-btn" id="editBtn" aria-haspopup="true" aria-expanded="false">Edit</button> 
+      <div class="menu-panel" id="editMenu" role="menu" aria-label="Edit menu"> 
+        <button class="menu-item" id="mUndo" role="menuitem">Undo</button> 
+        <button class="menu-item" id="mRedo" role="menuitem">Redo</button> 
+        <div class="menu-sep"></div> 
+        <button class="menu-item" id="mFind" role="menuitem">Find…</button> 
+        <button class="menu-item" id="mNext" role="menuitem">Next Match</button> 
+        <button class="menu-item" id="mPrev" role="menuitem">Previous Match</button> 
+        <div class="menu-sep"></div> 
+        <button class="menu-item" id="mReplace" role="menuitem">Replace…</button> 
+      </div> 
+    </div> 
+ 
+    <div class="menu-group" data-menu="view"> 
+      <button class="menu-btn" id="viewBtn" aria-haspopup="true" aria-expanded="false">View</button> 
+      <div class="menu-panel" id="viewMenu" role="menu" aria-label="View menu"> 
+        <button class="menu-item" id="mWrap" role="menuitemcheckbox" aria-checked="true">Wrap</button> 
+        <div class="menu-sep"></div> 
+        <button class="menu-item" id="mToggleLog" role="menuitem">Toggle Log</button> 
+      </div> 
+    </div> 
+ 
+    <div class="menubar-right"> 
+      <div class="note-title" id="currentTitle">—</div> 
+      <div class="status" id="matchStatus">0/0</div> 
+      <div class="status" id="saveStatus">未保存</div> 
+    </div> 
+  </div> 
+ 
+  <!-- Editor --> 
+  <div class="editor-wrap"> 
+    <div class="editor-surface"> 
+      <pre id="highlightLayer" aria-hidden="true"></pre> 
+      <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="ここにメモを入力…"></textarea> 
+    </div> 
+  </div> 
+ 
+  <!-- Bottom log --> 
+  <div class="bottombar"> 
+    <div class="logwrap"> 
+      <pre id="log"></pre> 
+    </div> 
+  </div> 
+ 
+  <!-- Open dialog --> 
+  <div class="overlay" id="openOverlay" aria-hidden="true"> 
+    <div class="dialog" role="dialog" aria-label="Open Memo"> 
+      <div class="dialog-header"> 
+        <div class="dialog-title">Open Memo</div> 
+        <button class="btn" data-close="openOverlay">Close</button> 
+      </div> 
+      <div class="dialog-body"> 
+        <div class="dialog-row"> 
+          <select id="noteSelect" class="select" aria-label="メモ選択"></select> 
+        </div> 
+        <div class="dialog-row"> 
+          <button class="btn primary" id="openApplyBtn">Open</button> 
+          <button class="btn primary" id="newNoteBtn">New Memo</button> 
+        </div> 
+        <div class="hint">更新日時の新しい順に並びます。</div> 
+      </div> 
+    </div> 
+  </div> 
+ 
+  <!-- Rename dialog --> 
+  <div class="overlay" id="renameOverlay" aria-hidden="true"> 
+    <div class="dialog" role="dialog" aria-label="Rename Memo"> 
+      <div class="dialog-header"> 
+        <div class="dialog-title">Rename Memo</div> 
+        <button class="btn" data-close="renameOverlay">Close</button> 
+      </div> 
+      <div class="dialog-body"> 
+        <div class="dialog-row"> 
+          <input id="titleInput" class="input" type="text" placeholder="タイトル" /> 
+        </div> 
+        <div class="dialog-row"> 
+          <button class="btn primary" id="renameBtn">Rename</button> 
+          <button class="btn danger" id="deleteBtn">Delete</button> 
+        </div> 
+      </div> 
+    </div> 
+  </div> 
+ 
+  <!-- Find dialog --> 
+  <div class="overlay" id="findOverlay" aria-hidden="true"> 
+    <div class="dialog" role="dialog" aria-label="Find"> 
+      <div class="dialog-header"> 
+        <div class="dialog-title">Find</div> 
+        <button class="btn" data-close="findOverlay">Close</button> 
+      </div> 
+      <div class="dialog-body"> 
+        <div class="dialog-row"> 
+          <input id="findInput" class="input" type="text" placeholder="検索（Enter=次へ / Shift+Enter=前へ）" /> 
+        </div> 
+        <div class="dialog-row"> 
+          <label class="toggle"><input id="regexToggle" type="checkbox" /> 正規表現</label> 
+          <label class="toggle"><input id="caseToggle" type="checkbox" /> 大小区別</label> 
+        </div> 
+        <div class="dialog-row"> 
+          <button class="btn" id="prevBtn">Previous</button> 
+          <button class="btn primary" id="nextBtn">Next</button> 
+        </div> 
+      </div> 
+    </div> 
+  </div> 
+ 
+  <!-- Replace dialog --> 
+  <div class="overlay" id="replaceOverlay" aria-hidden="true"> 
+    <div class="dialog" role="dialog" aria-label="Replace"> 
+      <div class="dialog-header"> 
+        <div class="dialog-title">Replace</div> 
+        <button class="btn" data-close="replaceOverlay">Close</button> 
+      </div> 
+      <div class="dialog-body"> 
+        <div class="dialog-row"> 
+          <input id="replaceInput" class="input" type="text" placeholder="置換文字列" /> 
+        </div> 
+        <div class="dialog-row"> 
+          <button class="btn" id="replaceBtn">Replace</button> 
+          <button class="btn danger" id="replaceAllBtn">Replace All</button> 
+          <button class="btn" id="clearBtn">Clear Text</button> 
+        </div> 
+        <div class="hint">Replace は現在のマッチのみ、Replace All は全マッチを対象にします。</div> 
+      </div> 
+    </div> 
+  </div> 
+ 
+  <!-- Hidden import input --> 
+  <input id="importFile" type="file" accept="application/json,.json" style="display:none" /> 
+ 
+<script> 
+(() => { 
+  // ========================= 
+  // Storage keys 
+  // ========================= 
+  const KEY_NOTES   = "memo:notes:v2"; 
+  const KEY_CURRENT = "memo:current:v2"; 
+  const KEY_WRAP    = "memo:wrap:v1"; 
+  const KEY_CASE    = "memo:case:v1"; 
+  const KEY_REGEX   = "memo:regex:v1"; 
+  const KEY_LOGUI   = "memo:logui:v1"; 
+ 
+  // ========================= 
+  // Elements 
+  // ========================= 
+  const editor = document.getElementById("editor"); 
+  const highlightLayer = document.getElementById("highlightLayer"); 
+ 
+  const currentTitle = document.getElementById("currentTitle"); 
+  const matchStatus  = document.getElementById("matchStatus"); 
+  const saveStatus   = document.getElementById("saveStatus"); 
+ 
+  const logEl = document.getElementById("log"); 
+ 
+  // Menus 
+  const fileBtn = document.getElementById("fileBtn"); 
+  const editBtn = document.getElementById("editBtn"); 
+  const viewBtn = document.getElementById("viewBtn"); 
+  const fileMenu = document.getElementById("fileMenu"); 
+  const editMenu = document.getElementById("editMenu"); 
+  const viewMenu = document.getElementById("viewMenu"); 
+ 
+  // Menu items 
+  const mNewMemo = document.getElementById("mNewMemo"); 
+  const mOpen = document.getElementById("mOpen"); 
+  const mRename = document.getElementById("mRename"); 
+  const mUndo = document.getElementById("mUndo"); 
+  const mRedo = document.getElementById("mRedo"); 
+  const mFind = document.getElementById("mFind"); 
+  const mNext = document.getElementById("mNext"); 
+  const mPrev = document.getElementById("mPrev"); 
+  const mReplace = document.getElementById("mReplace"); 
+  const mWrap = document.getElementById("mWrap"); 
+  const mToggleLog = document.getElementById("mToggleLog"); 
+ 
+  const mExportSel = document.getElementById("mExportSel"); 
+  const mExportAll = document.getElementById("mExportAll"); 
+  const mImport = document.getElementById("mImport"); 
+  const mDelete = document.getElementById("mDelete"); 
+ 
+  // Dialogs & UI 
+  const openOverlay = document.getElementById("openOverlay"); 
+  const renameOverlay = document.getElementById("renameOverlay"); 
+  const findOverlay = document.getElementById("findOverlay"); 
+  const replaceOverlay = document.getElementById("replaceOverlay"); 
+ 
+  const noteSelect = document.getElementById("noteSelect"); 
+  const openApplyBtn = document.getElementById("openApplyBtn"); 
+  const newNoteBtn = document.getElementById("newNoteBtn"); 
+ 
+  const titleInput = document.getElementById("titleInput"); 
+  const renameBtn = document.getElementById("renameBtn"); 
+  const deleteBtn = document.getElementById("deleteBtn"); 
+ 
+  const findInput = document.getElementById("findInput"); 
+  const regexToggle = document.getElementById("regexToggle"); 
+  const caseToggle = document.getElementById("caseToggle"); 
+  const prevBtn = document.getElementById("prevBtn"); 
+  const nextBtn = document.getElementById("nextBtn"); 
+ 
+  const replaceInput = document.getElementById("replaceInput"); 
+  const replaceBtn = document.getElementById("replaceBtn"); 
+  const replaceAllBtn = document.getElementById("replaceAllBtn"); 
+  const clearBtn = document.getElementById("clearBtn"); 
+ 
+  const importFile = document.getElementById("importFile"); 
+ 
+  // ========================= 
+  // Logger 
+  // ========================= 
+  const LOG_MAX = 260; 
+  let logLines = []; 
+  function ts(){ 
+    const d = new Date(); 
+    const hh = String(d.getHours()).padStart(2,"0"); 
+    const mm = String(d.getMinutes()).padStart(2,"0"); 
+    const ss = String(d.getSeconds()).padStart(2,"0"); 
+    return `${hh}:${mm}:${ss}`; 
+  } 
+  function safeJson(obj){ 
+    try{ return JSON.stringify(obj); }catch{ return "[unserializable]"; } 
+  } 
+  function pushLog(level, msg, obj){ 
+    const line = `[${ts()}] ${level} ${msg}` + (obj ? ` ${safeJson(obj)}` : ""); 
+    logLines.push(line); 
+    if (logLines.length > LOG_MAX) logLines = logLines.slice(logLines.length - LOG_MAX); 
+    logEl.textContent = logLines.join("\n"); 
+    logEl.scrollTop = logEl.scrollHeight; 
+ 
+    if (level === "ERR") console.error(line, obj ?? ""); 
+    else if (level === "WRN") console.warn(line, obj ?? ""); 
+    else console.log(line, obj ?? ""); 
+  } 
+  const log  = (m,o)=>pushLog("INF",m,o); 
+  const warn = (m,o)=>pushLog("WRN",m,o); 
+  const err  = (m,o)=>pushLog("ERR",m,o); 
+ 
+  // ========================= 
+  // DB 
+  // ========================= 
+  let db = { version: 2, notes: [] }; 
+  let currentId = null; 
+ 
+  function uid(){ 
+    return `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`; 
+  } 
+  function nowIso(){ return new Date().toISOString(); } 
+  function getNoteById(id){ return db.notes.find(n => n.id === id) || null; } 
+ 
+  function ensureAtLeastOneNote(){ 
+    if (db.notes.length) return; 
+    const id = uid(); 
+    db.notes.push({ id, title:"新しいメモ", text:"", createdAt: nowIso(), updatedAt: nowIso() }); 
+    currentId = id; 
+  } 
+  function sortNotes(){ 
+    db.notes.sort((a,b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")); 
+  } 
+ 
+  // ========================= 
+  // Undo/Redo (per note) 
+  // ========================= 
+  const HISTORY_LIMIT = 120; 
+  const historyMap = new Map(); // noteId -> {undo:[], redo:[]} 
+  function getHistory(noteId){ 
+    if (!historyMap.has(noteId)) historyMap.set(noteId, { undo: [], redo: [] }); 
+    return historyMap.get(noteId); 
+  } 
+  function snapshotFromEditor(){ 
+    return { 
+      text: editor.value, 
+      selStart: editor.selectionStart ?? 0, 
+      selEnd: editor.selectionEnd ?? 0 
+    }; 
+  } 
+  function applySnapshot(snap){ 
+    editor.value = snap.text; 
+    editor.focus(); 
+    editor.setSelectionRange(snap.selStart, snap.selEnd); 
+    scheduleHighlight(true); 
+    syncScroll(); 
+  } 
+  function pushUndoSnapshot(noteId, snap){ 
+    const h = getHistory(noteId); 
+    const last = h.undo[h.undo.length - 1]; 
+    if (last && last.text === snap.text && last.selStart === snap.selStart && last.selEnd === snap.selEnd) return; 
+    h.undo.push(snap); 
+    if (h.undo.length > HISTORY_LIMIT) h.undo.shift(); 
+    h.redo = []; 
+  } 
+  function doUndo(){ 
+    const h = getHistory(currentId); 
+    if (h.undo.length <= 1) return; // 最初の状態は残す 
+    const cur = h.undo.pop(); 
+    h.redo.push(cur); 
+    const prev = h.undo[h.undo.length - 1]; 
+    applySnapshot(prev); 
+    updateCurrentNoteTextFromEditor(true); 
+    schedulePersist(); 
+    log("Undo", { noteId: currentId }); 
+  } 
+  function doRedo(){ 
+    const h = getHistory(currentId); 
+    if (!h.redo.length) return; 
+    const snap = h.redo.pop(); 
+    h.undo.push(snap); 
+    applySnapshot(snap); 
+    updateCurrentNoteTextFromEditor(true); 
+    schedulePersist(); 
+    log("Redo", { noteId: currentId }); 
+  } 
+ 
+  // ========================= 
+  // Settings 
+  // ========================= 
+  function setSavedState(text){ saveStatus.textContent = text; } 
+ 
+  function setWrap(on){ 
+    if (on){ 
+      document.body.classList.remove("nowrap"); 
+      editor.setAttribute("wrap","soft"); 
+      mWrap.setAttribute("aria-checked","true"); 
+      mWrap.textContent = "Wrap"; 
+    } else { 
+      document.body.classList.add("nowrap"); 
+      editor.setAttribute("wrap","off"); 
+      mWrap.setAttribute("aria-checked","false"); 
+      mWrap.textContent = "Wrap (Off)"; 
+    } 
+    localStorage.setItem(KEY_WRAP, on ? "1" : "0"); 
+    scheduleHighlight(true); 
+    setSavedState("保存中…"); 
+    schedulePersist(); 
+  } 
+ 
+  function isLogVisible(){ 
+    return localStorage.getItem(KEY_LOGUI) === "1"; 
+  } 
+  function setLogVisible(v){ 
+    localStorage.setItem(KEY_LOGUI, v ? "1" : "0"); 
+    document.querySelector(".bottombar").style.display = v ? "block" : "none"; 
+  } 
+ 
+  // ========================= 
+  // Persistence 
+  // ========================= 
+  function loadDB(){ 
+    const raw = localStorage.getItem(KEY_NOTES); 
+    if (raw){ 
+      try{ 
+        const parsed = JSON.parse(raw); 
+        if (parsed && Array.isArray(parsed.notes)){ 
+          db = { version: 2, notes: parsed.notes }; 
+          log("DB loaded", { notes: db.notes.length }); 
+        } 
+      }catch(e){ 
+        warn("DB parse failed", { message: e?.message }); 
+      } 
+    } 
+ 
+    // legacy migrate (optional) 
+    const legacy = localStorage.getItem("memo:text:v1"); 
+    if (legacy != null && db.notes.length === 0){ 
+      const id = uid(); 
+      db.notes.push({ id, title:"移行メモ", text: legacy, createdAt: nowIso(), updatedAt: nowIso() }); 
+      currentId = id; 
+      log("Migrated legacy memo:text:v1"); 
+    } 
+ 
+    currentId = localStorage.getItem(KEY_CURRENT) || currentId; 
+    ensureAtLeastOneNote(); 
+    if (!getNoteById(currentId)) currentId = db.notes[0].id; 
+ 
+    // Settings 
+    const wrap = localStorage.getItem(KEY_WRAP); 
+    const wrapOn = (wrap == null) ? true : (wrap === "1"); 
+    setWrap(wrapOn); 
+ 
+    const cs = localStorage.getItem(KEY_CASE); 
+    caseToggle.checked = (cs === "1"); 
+ 
+    const rx = localStorage.getItem(KEY_REGEX); 
+    regexToggle.checked = (rx === "1"); 
+ 
+    setLogVisible(isLogVisible()); 
+ 
+    refreshNoteSelect(); 
+    loadCurrentNoteToEditor(); 
+ 
+    // init history baseline 
+    const h = getHistory(currentId); 
+    h.undo = [snapshotFromEditor()]; 
+    h.redo = []; 
+ 
+    setSavedState("読み込み済み"); 
+  } 
+ 
+  const schedulePersist = debounce(() => persistDB(), 350); 
+ 
+  function persistDB(){ 
+    try{ 
+      localStorage.setItem(KEY_NOTES, JSON.stringify(db)); 
+      localStorage.setItem(KEY_CURRENT, currentId); 
+      localStorage.setItem(KEY_CASE,  caseToggle.checked ? "1" : "0"); 
+      localStorage.setItem(KEY_REGEX, regexToggle.checked ? "1" : "0"); 
+      setSavedState("保存しました"); 
+      log("persistDB()", { notes: db.notes.length, currentId, textLen: editor.value.length }); 
+    }catch(e){ 
+      setSavedState("保存失敗"); 
+      err("persistDB failed", { message: e?.message }); 
+    } 
+  } 
+ 
+  function updateCurrentNoteTextFromEditor(fromUndoRedo=false){ 
+    const n = getNoteById(currentId); 
+    if (!n) return; 
+    n.text = editor.value; 
+    n.updatedAt = nowIso(); 
+    updateTitleDisplay(); 
+    if (!fromUndoRedo) refreshNoteSelect(); // 更新日時順のため（頻繁なら外す） 
+  } 
+ 
+  // ========================= 
+  // Notes UI 
+  // ========================= 
+  function refreshNoteSelect(){ 
+    sortNotes(); 
+    const cur = currentId; 
+    noteSelect.innerHTML = ""; 
+    for (const n of db.notes){ 
+      const opt = document.createElement("option"); 
+      opt.value = n.id; 
+      opt.textContent = (n.title || "無題").slice(0, 80); 
+      noteSelect.appendChild(opt); 
+    } 
+    noteSelect.value = cur; 
+  } 
+ 
+  function updateTitleDisplay(){ 
+    const n = getNoteById(currentId); 
+    currentTitle.textContent = n ? n.title : "—"; 
+  } 
+ 
+  function loadCurrentNoteToEditor(){ 
+    const n = getNoteById(currentId); 
+    if (!n) return; 
+    editor.value = n.text || ""; 
+    titleInput.value = n.title || ""; 
+    updateTitleDisplay(); 
+    scheduleHighlight(true); 
+    log("Loaded note", { id: n.id, title: n.title, len: editor.value.length }); 
+  } 
+ 
+  function switchNote(nextId){ 
+    if (!getNoteById(nextId) || nextId === currentId) return; 
+    updateCurrentNoteTextFromEditor(); 
+    currentId = nextId; 
+    refreshNoteSelect(); 
+    loadCurrentNoteToEditor(); 
+ 
+    // history baseline 
+    const h = getHistory(currentId); 
+    if (h.undo.length === 0){ 
+      h.undo = [snapshotFromEditor()]; 
+      h.redo = []; 
+    } 
+ 
+    setSavedState("切替"); 
+    schedulePersist(); 
+  } 
+ 
+  function createNote(){ 
+    updateCurrentNoteTextFromEditor(); 
+    const id = uid(); 
+    db.notes.push({ id, title:`メモ ${db.notes.length + 1}`, text:"", createdAt: nowIso(), updatedAt: nowIso() }); 
+    currentId = id; 
+    refreshNoteSelect(); 
+    loadCurrentNoteToEditor(); 
+ 
+    const h = getHistory(currentId); 
+    h.undo = [snapshotFromEditor()]; 
+    h.redo = []; 
+ 
+    setSavedState("保存中…"); 
+    schedulePersist(); 
+    log("createNote()", { id }); 
+  } 
+ 
+  function renameCurrent(){ 
+    const n = getNoteById(currentId); 
+    if (!n) return; 
+    const t = (titleInput.value || "").trim(); 
+    n.title = t ? t : "無題"; 
+    n.updatedAt = nowIso(); 
+    refreshNoteSelect(); 
+    updateTitleDisplay(); 
+    setSavedState("保存中…"); 
+    schedulePersist(); 
+    log("renameCurrent()", { id: n.id, title: n.title }); 
+  } 
+ 
+  function deleteCurrent(){ 
+    if (db.notes.length <= 1){ 
+      alert("最後の1件は削除できません。"); 
+      return; 
+    } 
+    const n = getNoteById(currentId); 
+    const name = n?.title || "無題"; 
+    if (!confirm(`「${name}」を削除します。よろしいですか？`)) return; 
+ 
+    const idx = db.notes.findIndex(x => x.id === currentId); 
+    db.notes.splice(idx, 1); 
+    currentId = db.notes[Math.max(0, idx - 1)]?.id || db.notes[0]?.id; 
+ 
+    refreshNoteSelect(); 
+    loadCurrentNoteToEditor(); 
+ 
+    setSavedState("保存中…"); 
+    schedulePersist(); 
+    log("deleteCurrent()", { deletedId: n?.id, remaining: db.notes.length }); 
+  } 
+ 
+  // ========================= 
+  // Export / Import 
+  // ========================= 
+  function buildExportPayload(mode){ 
+    const notes = (mode === "all") 
+      ? db.notes 
+      : db.notes.filter(n => n.id === currentId); 
+ 
+    return { 
+      app: "memo-pwa", 
+      schema: 1, 
+      exportedAt: nowIso(), 
+      notes: notes.map(n => ({ 
+        id: n.id, 
+        title: n.title, 
+        text: n.text, 
+        createdAt: n.createdAt, 
+        updatedAt: n.updatedAt 
+      })) 
+    }; 
+  } 
+ 
+  function downloadJson(obj, filename){ 
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"}); 
+    const url = URL.createObjectURL(blob); 
+    const a = document.createElement("a"); 
+    a.href = url; 
+    a.download = filename; 
+    document.body.appendChild(a); 
+    a.click(); 
+    a.remove(); 
+    setTimeout(() => URL.revokeObjectURL(url), 1000); 
+  } 
+ 
+  function exportSelected(){ 
+    updateCurrentNoteTextFromEditor(); 
+    const payload = buildExportPayload("selected"); 
+    const safeTitle = (getNoteById(currentId)?.title || "memo").replace(/[\\/:*?"<>|]/g, "_").slice(0, 40); 
+    downloadJson(payload, `memo_selected_${safeTitle}.json`); 
+    log("exportSelected()", { notes: payload.notes.length }); 
+  } 
+ 
+  function exportAll(){ 
+    updateCurrentNoteTextFromEditor(); 
+    const payload = buildExportPayload("all"); 
+    downloadJson(payload, `memo_all_${new Date().toISOString().slice(0,10)}.json`); 
+    log("exportAll()", { notes: payload.notes.length }); 
+  } 
+ 
+  function normalizeImportedNote(n){ 
+    const title = (n?.title ?? "無題").toString(); 
+    const text  = (n?.text  ?? "").toString(); 
+    const createdAt = (n?.createdAt && typeof n.createdAt === "string") ? n.createdAt : nowIso(); 
+    const updatedAt = (n?.updatedAt && typeof n.updatedAt === "string") ? n.updatedAt : nowIso(); 
+    return { title, text, createdAt, updatedAt }; 
+  } 
+ 
+  function importPayload(payload){ 
+    if (!payload || !Array.isArray(payload.notes)){ 
+      alert("インポート形式が不正です（notes配列がありません）。"); 
+      warn("importPayload(): invalid format"); 
+      return; 
+    } 
+ 
+    updateCurrentNoteTextFromEditor(); 
+    const existingIds = new Set(db.notes.map(n => n.id)); 
+ 
+    let imported = 0; 
+    let lastImportedId = null; 
+ 
+    for (const item of payload.notes){ 
+      const normalized = normalizeImportedNote(item); 
+      let id = (item?.id && typeof item.id === "string") ? item.id : uid(); 
+      if (existingIds.has(id)) id = uid(); 
+ 
+      db.notes.push({ 
+        id, 
+        title: normalized.title, 
+        text: normalized.text, 
+        createdAt: normalized.createdAt, 
+        updatedAt: normalized.updatedAt 
+      }); 
+      existingIds.add(id); 
+      imported++; 
+      lastImportedId = id; 
+ 
+      // history baseline 
+      const h = getHistory(id); 
+      h.undo = [{ text: normalized.text, selStart:0, selEnd:0 }]; 
+      h.redo = []; 
+    } 
+ 
+    if (imported === 0){ 
+      alert("インポートできるメモがありませんでした。"); 
+      return; 
+    } 
+ 
+    currentId = lastImportedId; 
+    refreshNoteSelect(); 
+    loadCurrentNoteToEditor(); 
+    setSavedState("保存中…"); 
+    schedulePersist(); 
+ 
+    log("importPayload()", { imported, currentId }); 
+    alert(`インポートしました（${imported}件）。`); 
+  } 
+ 
+  async function importFromFile(file){ 
+    try{ 
+      const text = await file.text(); 
+      const payload = JSON.parse(text); 
+      importPayload(payload); 
+    }catch(e){ 
+      err("importFromFile failed", { message: e?.message }); 
+      alert("インポートに失敗しました（JSON形式を確認してください）。"); 
+    } 
+  } 
+ 
+  // ========================= 
+  // Search / Highlight 
+  // ========================= 
+  let matches = []; 
+  let activeIndex = -1; 
+  let highlightTimer = null; 
+ 
+  const escapeHtml = (s) => 
+    s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") 
+     .replace(/"/g,"&quot;").replace(/'/g,"&#039;"); 
+ 
+  function buildMatcher(){ 
+    const query = findInput.value; 
+    if (!query) return { ok:false, reason:"empty" }; 
+    const flags = caseToggle.checked ? "g" : "gi"; 
+    if (regexToggle.checked){ 
+      try{ 
+        const re = new RegExp(query, flags); 
+        return { ok:true, type:"regex", re }; 
+      }catch(e){ 
+        return { ok:false, reason:"regex", error:e }; 
+      } 
+    } else { 
+      const esc = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); 
+      const re = new RegExp(esc, flags); 
+      return { ok:true, type:"plain", re }; 
+    } 
+  } 
+ 
+  function computeMatches(){ 
+    const m = buildMatcher(); 
+    matches = []; 
+    activeIndex = -1; 
+ 
+    if (!m.ok){ 
+      matchStatus.textContent = (m.reason === "regex") ? "ERR" : "0/0"; 
+      renderHighlight(); 
+      return; 
+    } 
+ 
+    const text = editor.value; 
+    let match; 
+    while ((match = m.re.exec(text)) !== null){ 
+      const start = match.index; 
+      const end = start + match[0].length; 
+      if (end === start){ 
+        m.re.lastIndex = start + 1; 
+        continue; 
+      } 
+      matches.push({ start, end }); 
+      if (matches.length > 5000) break; 
+    } 
+ 
+    if (matches.length){ 
+      const caret = editor.selectionStart ?? 0; 
+      let idx = matches.findIndex(x => x.start >= caret); 
+      if (idx === -1) idx = 0; 
+      activeIndex = idx; 
+    } 
+ 
+    updateMatchStatus(); 
+    renderHighlight(); 
+  } 
+ 
+  function updateMatchStatus(){ 
+    if (!matches.length){ 
+      matchStatus.textContent = "0/0"; 
+      return; 
+    } 
+    matchStatus.textContent = `${activeIndex+1}/${matches.length}`; 
+  } 
+ 
+  function syncScroll(){ 
+    highlightLayer.scrollTop = editor.scrollTop; 
+    highlightLayer.scrollLeft = editor.scrollLeft; 
+  } 
+ 
+  function renderHighlight(){ 
+    const text = editor.value; 
+    const query = findInput.value; 
+ 
+    if (!query || !matches.length){ 
+      highlightLayer.innerHTML = escapeHtml(text) || "&nbsp;"; 
+      syncScroll(); 
+      return; 
+    } 
+ 
+    let out = ""; 
+    let last = 0; 
+    for (let i=0;i<matches.length;i++){ 
+      const { start, end } = matches[i]; 
+      out += escapeHtml(text.slice(last, start)); 
+      const cls = (i === activeIndex) ? "hit active" : "hit"; 
+      out += `<span class="${cls}">${escapeHtml(text.slice(start, end))}</span>`; 
+      last = end; 
+      if (out.length > 2_000_000) break; 
+    } 
+    out += escapeHtml(text.slice(last)); 
+    highlightLayer.innerHTML = out || "&nbsp;"; 
+    syncScroll(); 
+  } 
+ 
+  function scheduleHighlight(force=false){ 
+    clearTimeout(highlightTimer); 
+    highlightTimer = setTimeout(() => computeMatches(), force ? 0 : 80); 
+  } 
+ 
+  function scrollCaretIntoView(pos){ 
+    const before = editor.value.slice(0, pos); 
+    const lines = before.split("\n").length - 1; 
+    const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 24; 
+    const targetY = Math.max(0, lines * lineHeight - editor.clientHeight * 0.3); 
+    editor.scrollTop = targetY; 
+    syncScroll(); 
+  } 
+ 
+  function gotoMatch(idx){ 
+    if (!matches.length) return; 
+    activeIndex = (idx + matches.length) % matches.length; 
+    const { start, end } = matches[activeIndex]; 
+    editor.focus(); 
+    editor.setSelectionRange(start, end); 
+    scrollCaretIntoView(start); 
+    updateMatchStatus(); 
+    renderHighlight(); 
+  } 
+ 
+  // ========================= 
+  // Replace 
+  // ========================= 
+  function replaceCurrent(){ 
+    if (!matches.length) return; 
+    const rep = replaceInput.value ?? ""; 
+    const { start, end } = matches[activeIndex]; 
+    const text = editor.value; 
+ 
+    editor.value = text.slice(0, start) + rep + text.slice(end); 
+    editor.setSelectionRange(start, start + rep.length); 
+ 
+    setSavedState("保存中…"); 
+    updateCurrentNoteTextFromEditor(); 
+    schedulePersist(); 
+    scheduleHighlight(true); 
+ 
+    // history 
+    pushUndoSnapshot(currentId, snapshotFromEditor()); 
+  } 
+ 
+  function replaceAll(){ 
+    const m = buildMatcher(); 
+    if (!m.ok) return; 
+    const rep = replaceInput.value ?? ""; 
+    editor.value = editor.value.replace(m.re, rep); 
+ 
+    setSavedState("保存中…"); 
+    updateCurrentNoteTextFromEditor(); 
+    schedulePersist(); 
+    scheduleHighlight(true); 
+ 
+    pushUndoSnapshot(currentId, snapshotFromEditor()); 
+  } 
+ 
+  // ========================= 
+  // Dialog helpers 
+  // ========================= 
+  function openOverlayById(id){ 
+    const el = document.getElementById(id); 
+    el.classList.add("open"); 
+    el.setAttribute("aria-hidden","false"); 
+  } 
+  function closeOverlayById(id){ 
+    const el = document.getElementById(id); 
+    el.classList.remove("open"); 
+    el.setAttribute("aria-hidden","true"); 
+  } 
+  function closeAllOverlays(){ 
+    for (const id of ["openOverlay","renameOverlay","findOverlay","replaceOverlay"]){ 
+      closeOverlayById(id); 
+    } 
+  } 
+ 
+  document.addEventListener("click", (e) => { 
+    const closeId = e.target?.getAttribute?.("data-close"); 
+    if (closeId) closeOverlayById(closeId); 
+  }); 
+ 
+  // overlay background click to close 
+  for (const ov of [openOverlay, renameOverlay, findOverlay, replaceOverlay]){ 
+    ov.addEventListener("click", (e) => { 
+      if (e.target === ov) ov.classList.remove("open"); 
+    }); 
+  } 
+ 
+  // ========================= 
+  // Menus open/close 
+  // ========================= 
+  function closeMenus(){ 
+    for (const p of [fileMenu, editMenu, viewMenu]) p.classList.remove("open"); 
+    fileBtn.setAttribute("aria-expanded","false"); 
+    editBtn.setAttribute("aria-expanded","false"); 
+    viewBtn.setAttribute("aria-expanded","false"); 
+  } 
+  function toggleMenu(btn, panel){ 
+    const isOpen = panel.classList.contains("open"); 
+    closeMenus(); 
+    if (!isOpen){ 
+      panel.classList.add("open"); 
+      btn.setAttribute("aria-expanded","true"); 
+    } 
+  } 
+ 
+  fileBtn.addEventListener("click", () => toggleMenu(fileBtn, fileMenu)); 
+  editBtn.addEventListener("click", () => toggleMenu(editBtn, editMenu)); 
+  viewBtn.addEventListener("click", () => toggleMenu(viewBtn, viewMenu)); 
+ 
+  document.addEventListener("click", (e) => { 
+    const inMenu = e.target.closest(".menu-group"); 
+    if (!inMenu) closeMenus(); 
+  }); 
+ 
+  document.addEventListener("keydown", (e) => { 
+    if (e.key === "Escape"){ 
+      closeMenus(); 
+      closeAllOverlays(); 
+    } 
+  }); 
+ 
+  // ========================= 
+  // Menu Actions (Requested) 
+  // ========================= 
+  mNewMemo.addEventListener("click", () => { closeMenus(); createNote(); }); 
+  mOpen.addEventListener("click", () => { closeMenus(); refreshNoteSelect(); openOverlayById("openOverlay"); }); 
+  mRename.addEventListener("click", () => { closeMenus(); titleInput.value = getNoteById(currentId)?.title || ""; openOverlayById("renameOverlay"); titleInput.focus(); }); 
+ 
+  mUndo.addEventListener("click", () => { closeMenus(); doUndo(); }); 
+  mRedo.addEventListener("click", () => { closeMenus(); doRedo(); }); 
+ 
+  mFind.addEventListener("click", () => { closeMenus(); openOverlayById("findOverlay"); findInput.focus(); scheduleHighlight(true); }); 
+  mNext.addEventListener("click", () => { closeMenus(); gotoMatch(activeIndex + 1); }); 
+  mPrev.addEventListener("click", () => { closeMenus(); gotoMatch(activeIndex - 1); }); 
+  mReplace.addEventListener("click", () => { closeMenus(); openOverlayById("replaceOverlay"); replaceInput.focus(); }); 
+ 
+  mWrap.addEventListener("click", () => { 
+    closeMenus(); 
+    const on = !document.body.classList.contains("nowrap"); 
+    setWrap(!on); 
+  }); 
+ 
+  mToggleLog.addEventListener("click", () => { 
+    closeMenus(); 
+    const v = !isLogVisible(); 
+    setLogVisible(v); 
+    log("Toggle Log", { visible: v }); 
+  }); 
+ 
+  // Export/Import/Delete (Fileメニュー拡張) 
+  mExportSel.addEventListener("click", () => { closeMenus(); exportSelected(); }); 
+  mExportAll.addEventListener("click", () => { closeMenus(); exportAll(); }); 
+  mImport.addEventListener("click", () => { closeMenus(); importFile.click(); }); 
+  mDelete.addEventListener("click", () => { closeMenus(); deleteCurrent(); }); 
+ 
+  // ========================= 
+  // Dialog actions 
+  // ========================= 
+  openApplyBtn.addEventListener("click", () => { 
+    const nextId = noteSelect.value; 
+    switchNote(nextId); 
+    closeOverlayById("openOverlay"); 
+  }); 
+  newNoteBtn.addEventListener("click", () => { 
+    createNote(); 
+    refreshNoteSelect(); 
+    closeOverlayById("openOverlay"); 
+  }); 
+ 
+  renameBtn.addEventListener("click", () => { 
+    renameCurrent(); 
+    closeOverlayById("renameOverlay"); 
+  }); 
+  deleteBtn.addEventListener("click", () => { 
+    deleteCurrent(); 
+    closeOverlayById("renameOverlay"); 
+  }); 
+ 
+  // Find dialog interactions 
+  findInput.addEventListener("input", () => scheduleHighlight(true)); 
+  findInput.addEventListener("keydown", (e) => { 
+    if (e.key === "Enter"){ 
+      e.preventDefault(); 
+      if (e.shiftKey) gotoMatch(activeIndex - 1); 
+      else gotoMatch(activeIndex + 1); 
+    } 
+  }); 
+  regexToggle.addEventListener("change", () => { 
+    localStorage.setItem(KEY_REGEX, regexToggle.checked ? "1" : "0"); 
+    scheduleHighlight(true); 
+  }); 
+  caseToggle.addEventListener("change", () => { 
+    localStorage.setItem(KEY_CASE, caseToggle.checked ? "1" : "0"); 
+    scheduleHighlight(true); 
+  }); 
+  prevBtn.addEventListener("click", () => gotoMatch(activeIndex - 1)); 
+  nextBtn.addEventListener("click", () => gotoMatch(activeIndex + 1)); 
+ 
+  // Replace dialog actions 
+  replaceBtn.addEventListener("click", () => replaceCurrent()); 
+  replaceAllBtn.addEventListener("click", () => replaceAll()); 
+  clearBtn.addEventListener("click", () => { 
+    if (!confirm("本文をクリアします。よろしいですか？")) return; 
+    editor.value = ""; 
+    setSavedState("保存中…"); 
+    updateCurrentNoteTextFromEditor(); 
+    schedulePersist(); 
+    scheduleHighlight(true); 
+    pushUndoSnapshot(currentId, snapshotFromEditor()); 
+  }); 
+ 
+  // Import file 
+  importFile.addEventListener("change", async () => { 
+    const file = importFile.files?.[0]; 
+    importFile.value = ""; 
+    if (!file) return; 
+    await importFromFile(file); 
+  }); 
+ 
+  // ========================= 
+  // Editor input: save + history + highlight 
+  // ========================= 
+  const scheduleHistory = debounce(() => { 
+    pushUndoSnapshot(currentId, snapshotFromEditor()); 
+  }, 250); 
+ 
+  editor.addEventListener("input", () => { 
+    setSavedState("保存中…"); 
+    updateCurrentNoteTextFromEditor(); 
+    schedulePersist(); 
+    scheduleHighlight(false); 
+    scheduleHistory(); 
+  }); 
+ 
+  editor.addEventListener("scroll", syncScroll); 
+ 
+  // Keyboard shortcuts (optional but useful) 
+  document.addEventListener("keydown", (e) => { 
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform); 
+    const mod = isMac ? e.metaKey : e.ctrlKey; 
+ 
+    if (mod && e.key.toLowerCase() === "z" && !e.shiftKey){ 
+      e.preventDefault(); doUndo(); return; 
+    } 
+    if ((mod && e.key.toLowerCase() === "z" && e.shiftKey) || (mod && e.key.toLowerCase() === "y")){ 
+      e.preventDefault(); doRedo(); return; 
+    } 
+    if (mod && e.key.toLowerCase() === "f"){ 
+      e.preventDefault(); openOverlayById("findOverlay"); findInput.focus(); return; 
+    } 
+    if (mod && e.key.toLowerCase() === "h"){ 
+      e.preventDefault(); openOverlayById("replaceOverlay"); replaceInput.focus(); return; 
+    } 
+  }); 
+ 
+  // ========================= 
+  // debounce helper 
+  // ========================= 
+  function debounce(fn, wait){ 
+    let t = null; 
+    return (...args) => { 
+      clearTimeout(t); 
+      t = setTimeout(() => fn(...args), wait); 
+    }; 
+  } 
+ 
+  // ========================= 
+  // PWA (offline): manifest + SW 
+  // ========================= 
+  function setupPWA(){ 
+    try{ 
+      const manifest = { 
+        name: "Memo PWA", 
+        short_name: "Memo", 
+        start_url: ".", 
+        display: "standalone", 
+        background_color: "#0b1220", 
+        theme_color: "#111827", 
+        icons: [{ 
+          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='192' height='192'%3E%3Crect width='192' height='192' rx='36' fill='%23111827'/%3E%3Cpath d='M56 54h80v12H56zM56 82h80v12H56zM56 110h56v12H56z' fill='%2360a5fa'/%3E%3C/svg%3E", 
+          sizes: "192x192", 
+          type: "image/svg+xml", 
+          purpose: "any" 
+        }] 
+      }; 
+      const manifestBlob = new Blob([JSON.stringify(manifest)], {type:"application/manifest+json"}); 
+      const manifestUrl = URL.createObjectURL(manifestBlob); 
+      const link = document.createElement("link"); 
+      link.rel = "manifest"; 
+      link.href = manifestUrl; 
+      document.head.appendChild(link); 
+      log("PWA manifest attached"); 
+    }catch(e){ 
+      err("manifest setup failed", { message: e?.message }); 
+    } 
+ 
+    if (!("serviceWorker" in navigator)){ 
+      warn("serviceWorker not supported"); 
+      return; 
+    } 
+ 
+    const swCode = ` 
+      const CACHE = "memo-pwa-menu-v1"; 
+      self.addEventListener("install", (e) => { 
+        e.waitUntil((async () => { 
+          const cache = await caches.open(CACHE); 
+          cache.addAll([self.registration.scope]); 
+          self.skipWaiting(); 
+        })()); 
+      }); 
+      self.addEventListener("activate", (e) => { 
+        e.waitUntil((async () => { 
+          const keys = await caches.keys(); 
+          await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))); 
+          self.clients.claim(); 
+        })()); 
+      }); 
+      self.addEventListener("fetch", (e) => { 
+        e.respondWith((async () => { 
+          const cached = await caches.match(e.request, {ignoreSearch:true}); 
+          if (cached) return cached; 
+          try{ 
+            const res = await fetch(e.request); 
+            return res; 
+          }catch(err){ 
+            const fallback = await caches.match(self.registration.scope); 
+            return fallback || new Response("offline", {status:503}); 
+          } 
+        })()); 
+      }); 
+    `; 
+ 
+    try{ 
+      const swBlob = new Blob([swCode], {type:"text/javascript"}); 
+      const swUrl = URL.createObjectURL(swBlob); 
+      navigator.serviceWorker.register(swUrl, {scope:"./"}) 
+        .then(reg => log("SW registered", { scope: reg.scope })) 
+        .catch(e => err("SW register failed", { message: e?.message })); 
+    }catch(e){ 
+      err("SW setup failed", { message: e?.message }); 
+    } 
+  } 
+ 
+  // ========================= 
+  // Init 
+  // ========================= 
+  loadDB(); 
+  setupPWA(); 
+  scheduleHighlight(true); 
+ 
+  // Global error logs 
+  window.addEventListener("error", (e) => { 
+    err("window error", { message: e.message, source: e.filename, line: e.lineno, col: e.colno }); 
+  }); 
+  window.addEventListener("unhandledrejection", (e) => { 
+    err("unhandledrejection", { reason: String(e.reason) }); 
+  }); 
+ 
+})(); 
+</script> 
+</body> 
+</html> 
