@@ -393,6 +393,25 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
         incoming = [normalize_note(note) for note in notes]
         async with pool.acquire() as conn:
             async with conn.transaction():
+                incoming_ids = [note["id"] for note in incoming]
+                if incoming_ids:
+                    await conn.execute(
+                        """
+                        DELETE FROM notes
+                        WHERE user_id = $1
+                        AND NOT (note_id = ANY($2::text[]))
+                        """,
+                        user["id"],
+                        incoming_ids,
+                    )
+                else:
+                    await conn.execute(
+                        """
+                        DELETE FROM notes
+                        WHERE user_id = $1
+                        """,
+                        user["id"],
+                    )
                 for note in incoming:
                     await conn.execute(
                         """
