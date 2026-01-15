@@ -280,7 +280,7 @@ async def cors_middleware(request, handler):
         response = await handler(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,OPTIONS"
     return response
 
 
@@ -381,6 +381,22 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
                     )
         return web.json_response({"status": "ok", "received": len(incoming)})
 
+    async def put_notes(request):
+        user = request["user"]
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            return web.json_response({"error": "invalid_json"}, status=400)
+        notes = payload.get("notes") if isinstance(payload, dict) else None
+        if not isinstance(notes, list):
+            return web.json_response({"error": "notes_required"}, status=400)
+        incoming = [normalize_note(note) for note in notes]
+        async with lock:
+            db.setdefault("notesByUser", {})[user["id"]] = incoming
+            db["schema"] = SCHEMA_VERSION
+            await save_db(data_path, db)
+        return web.json_response({"status": "ok", "received": len(incoming)})
+
     async def register(request):
         if not request.app.get("allow_register"):
             return web.json_response({"error": "registration_disabled"}, status=403)
@@ -448,6 +464,7 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
 
     app.router.add_route("GET", "/notes", get_notes)
     app.router.add_route("POST", "/notes", post_notes)
+    app.router.add_route("PUT", "/notes", put_notes)
     app.router.add_route("POST", "/auth/register", register)
     app.router.add_route("POST", "/auth/login", login)
     app.router.add_route("POST", "/auth/logout", logout)

@@ -86,6 +86,8 @@ import { createSyncController } from "./modules/sync.js";
   const syncLoginBtn = document.getElementById("syncLoginBtn");
   const syncSaveBtn = document.getElementById("syncSaveBtn");
   const syncNowBtn = document.getElementById("syncNowBtn");
+  const syncReplaceLocalBtn = document.getElementById("syncReplaceLocalBtn");
+  const syncReplaceServerBtn = document.getElementById("syncReplaceServerBtn");
   const syncStatus = document.getElementById("syncStatus");
 
   const versionSelect = document.getElementById("versionSelect");
@@ -237,19 +239,28 @@ import { createSyncController } from "./modules/sync.js";
     history
   });
 
-  const { getEndpoint, setEndpoint, getToken, setToken, registerUser, loginUser, syncNow } =
-    createSyncController({
-      state,
-      ensureNoteVersioning,
-      recordVersionForNote,
-      refreshNoteSelect,
-      loadCurrentNoteToEditor,
-      setSavedState,
-      schedulePersist,
-      log,
-      warn,
-      err
-    });
+  const {
+    getEndpoint,
+    setEndpoint,
+    getToken,
+    setToken,
+    registerUser,
+    loginUser,
+    syncNow,
+    replaceLocalWithServer,
+    replaceServerWithLocal
+  } = createSyncController({
+    state,
+    ensureNoteVersioning,
+    recordVersionForNote,
+    refreshNoteSelect,
+    loadCurrentNoteToEditor,
+    setSavedState,
+    schedulePersist,
+    log,
+    warn,
+    err
+  });
 
   // =========================
   // Dialog helpers
@@ -581,6 +592,40 @@ import { createSyncController } from "./modules/sync.js";
     } catch (e) {
       err("syncNow failed", { message: e?.message });
       syncStatus.textContent = "Sync failed. Check the log.";
+    }
+  });
+
+  syncReplaceLocalBtn.addEventListener("click", async () => {
+    setEndpoint(syncEndpointInput.value);
+    setToken(syncTokenInput.value);
+    if (!window.confirm("Replace local notes with the server copy? This will discard local-only notes.")) {
+      return;
+    }
+    syncStatus.textContent = "Replacing local notes…";
+    try {
+      await replaceLocalWithServer({ endpoint: syncEndpointInput.value, token: syncTokenInput.value });
+      syncStatus.textContent = "Local notes replaced from server.";
+    } catch (e) {
+      err("replaceLocalWithServer failed", { message: e?.message });
+      syncStatus.textContent = "Replace failed. Check the log.";
+    }
+  });
+
+  syncReplaceServerBtn.addEventListener("click", async () => {
+    setEndpoint(syncEndpointInput.value);
+    setToken(syncTokenInput.value);
+    if (!window.confirm("Replace server notes with local data? This will erase server-only notes.")) {
+      return;
+    }
+    syncStatus.textContent = "Replacing server notes…";
+    try {
+      updateCurrentNoteTextFromEditor();
+      recordVersionForNote(state.currentId, { force: true });
+      await replaceServerWithLocal({ endpoint: syncEndpointInput.value, token: syncTokenInput.value });
+      syncStatus.textContent = "Server notes replaced from local.";
+    } catch (e) {
+      err("replaceServerWithLocal failed", { message: e?.message });
+      syncStatus.textContent = "Replace failed. Check the log.";
     }
   });
 

@@ -153,6 +153,25 @@ export function createSyncController({
     return res.json();
   }
 
+  async function replaceNotes(endpoint, notes, token) {
+    const base = normalizeEndpoint(endpoint);
+    if (!base) {
+      throw new Error("Sync endpoint is not set.");
+    }
+    const res = await fetch(`${base}/notes`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(token)
+      },
+      body: JSON.stringify({ notes })
+    });
+    if (!res.ok) {
+      throw new Error(`Server responded ${res.status}`);
+    }
+    return res.json();
+  }
+
   function applyServerNote(localNote, serverNote) {
     Object.assign(localNote, cloneNote(serverNote));
   }
@@ -250,6 +269,54 @@ export function createSyncController({
     log("Sync completed", { localUpdates, serverUpdates, conflicts });
   }
 
+  async function replaceLocalWithServer({ endpoint, token }) {
+    const base = normalizeEndpoint(endpoint);
+    if (!base) {
+      warn("Replace local: endpoint not set");
+      throw new Error("Sync endpoint is not set.");
+    }
+    setSavedState("Syncing…");
+    log("Replace local with server started", { endpoint: base });
+
+    const serverNotes = await fetchServerNotes(base, token);
+    state.db.notes = serverNotes.map((note) => cloneNote(note));
+    for (const note of state.db.notes) {
+      ensureNoteVersioning(note);
+    }
+
+    if (!state.db.notes.some((note) => note.id === state.currentId)) {
+      state.currentId = state.db.notes[0]?.id || null;
+    }
+
+    refreshNoteSelect();
+    loadCurrentNoteToEditor();
+    setSavedState("Saved");
+    schedulePersist();
+
+    log("Replace local with server completed", { notes: state.db.notes.length });
+  }
+
+  async function replaceServerWithLocal({ endpoint, token }) {
+    const base = normalizeEndpoint(endpoint);
+    if (!base) {
+      warn("Replace server: endpoint not set");
+      throw new Error("Sync endpoint is not set.");
+    }
+    setSavedState("Syncing…");
+    log("Replace server with local started", { endpoint: base });
+
+    for (const note of state.db.notes) {
+      ensureNoteVersioning(note);
+      recordVersionForNote(note.id, { force: false });
+    }
+
+    await replaceNotes(base, state.db.notes.map((note) => cloneNote(note)), token);
+    setSavedState("Saved");
+    schedulePersist();
+
+    log("Replace server with local completed", { notes: state.db.notes.length });
+  }
+
   return {
     getEndpoint,
     setEndpoint,
@@ -257,6 +324,8 @@ export function createSyncController({
     setToken,
     registerUser,
     loginUser,
-    syncNow
+    syncNow,
+    replaceLocalWithServer,
+    replaceServerWithLocal
   };
 }
