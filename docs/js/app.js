@@ -14,6 +14,7 @@ import { createSyncController } from "./modules/sync.js";
   // =========================
   const editor = document.getElementById("editor");
   const highlightLayer = document.getElementById("highlightLayer");
+  const editorSurface = document.querySelector(".editor-surface");
 
   const currentTitle = document.getElementById("currentTitle");
   const matchStatus = document.getElementById("matchStatus");
@@ -125,6 +126,7 @@ import { createSyncController } from "./modules/sync.js";
     editor.value = snap.text;
     editor.focus();
     editor.setSelectionRange(snap.selStart, snap.selEnd);
+    resizeEditorToContent();
     search.scheduleHighlight(true);
     search.syncScroll();
   }
@@ -148,6 +150,7 @@ import { createSyncController } from "./modules/sync.js";
       mWrap.setAttribute("aria-checked", "false");
       mWrap.textContent = "Wrap (Off)";
     }
+    resizeEditorToContent();
     savePreference(STORAGE_KEYS.wrap, on ? "1" : "0");
     search.scheduleHighlight(true);
     setSavedState("Saving…");
@@ -198,8 +201,23 @@ import { createSyncController } from "./modules/sync.js";
     search,
     setSavedState,
     schedulePersist,
-    log
+    log,
+    onEditorContentChange: () => {
+      resizeEditorToContent();
+    }
   });
+
+  function resizeEditorToContent() {
+    if (!editorSurface) return;
+    editorSurface.style.height = "auto";
+    highlightLayer.style.height = "auto";
+    editor.style.height = "auto";
+    const minHeight = parseFloat(getComputedStyle(editorSurface).minHeight) || 0;
+    const nextHeight = Math.max(editor.scrollHeight, minHeight);
+    editor.style.height = `${nextHeight}px`;
+    highlightLayer.style.height = `${nextHeight}px`;
+    editorSurface.style.height = `${nextHeight}px`;
+  }
 
   // =========================
   // Export / Import
@@ -457,6 +475,7 @@ import { createSyncController } from "./modules/sync.js";
 
     editor.value = text.slice(0, start) + rep + text.slice(end);
     editor.setSelectionRange(start, start + rep.length);
+    resizeEditorToContent();
 
     setSavedState("Saving…");
     updateCurrentNoteTextFromEditor();
@@ -484,6 +503,7 @@ import { createSyncController } from "./modules/sync.js";
 
     const rep = replaceInput.value ?? "";
     editor.value = editor.value.replace(re, rep);
+    resizeEditorToContent();
 
     setSavedState("Saving…");
     updateCurrentNoteTextFromEditor();
@@ -496,6 +516,7 @@ import { createSyncController } from "./modules/sync.js";
   clearBtn.addEventListener("click", () => {
     if (!confirm("Clear the memo content?")) return;
     editor.value = "";
+    resizeEditorToContent();
     setSavedState("Saving…");
     updateCurrentNoteTextFromEditor();
     schedulePersist();
@@ -589,6 +610,7 @@ import { createSyncController } from "./modules/sync.js";
     if (!confirm("Restore this version? Current content will be saved as a new version.")) return;
     recordVersionForNote(note.id, { force: true });
     editor.value = version.text || "";
+    resizeEditorToContent();
     setSavedState("Saving…");
     updateCurrentNoteTextFromEditor();
     schedulePersist();
@@ -610,6 +632,7 @@ import { createSyncController } from "./modules/sync.js";
     schedulePersist();
     search.scheduleHighlight(false);
     scheduleHistory();
+    resizeEditorToContent();
   });
 
   editor.addEventListener("scroll", search.syncScroll);
@@ -662,6 +685,9 @@ import { createSyncController } from "./modules/sync.js";
   regexToggle.checked = prefs.regex;
   caseToggle.checked = prefs.caseSensitive;
   setLogVisible(prefs.logVisible);
+
+  resizeEditorToContent();
+  window.addEventListener("resize", resizeEditorToContent);
 
   search.scheduleHighlight(true);
   setupPwa({ log, warn, err });

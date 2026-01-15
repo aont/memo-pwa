@@ -11,6 +11,7 @@ export function createNotesController({
   setSavedState,
   schedulePersist,
   log,
+  onEditorContentChange,
   confirmDelete = window.confirm
 }) {
   const MIN_VERSION_INTERVAL_MS = 5000;
@@ -104,6 +105,7 @@ export function createNotesController({
     if (!note) return;
     ensureNoteVersioning(note);
     editor.value = note.text || "";
+    onEditorContentChange?.();
     currentTitle.textContent = note.title || "Untitled";
     search.scheduleHighlight(true);
     search.syncScroll();
@@ -169,6 +171,7 @@ export function createNotesController({
       loadCurrentNoteToEditor();
     } else {
       editor.value = "";
+      onEditorContentChange?.();
       currentTitle.textContent = "—";
       setSavedState("Saved");
     }
