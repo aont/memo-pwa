@@ -391,10 +391,37 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
         if not isinstance(notes, list):
             return web.json_response({"error": "notes_required"}, status=400)
         incoming = [normalize_note(note) for note in notes]
-        async with lock:
-            db.setdefault("notesByUser", {})[user["id"]] = incoming
-            db["schema"] = SCHEMA_VERSION
-            await save_db(data_path, db)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                for note in incoming:
+                    await conn.execute(
+                        """
+                        INSERT INTO notes (
+                            user_id,
+                            note_id,
+                            title,
+                            text,
+                            created_at,
+                            updated_at,
+                            versions
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+                        ON CONFLICT (user_id, note_id)
+                        DO UPDATE SET
+                            title = EXCLUDED.title,
+                            text = EXCLUDED.text,
+                            created_at = EXCLUDED.created_at,
+                            updated_at = EXCLUDED.updated_at,
+                            versions = EXCLUDED.versions
+                        """,
+                        user["id"],
+                        note["id"],
+                        note["title"],
+                        note["text"],
+                        ensure_datetime(note["createdAt"]),
+                        ensure_datetime(note["updatedAt"]),
+                        json.dumps(note["versions"], ensure_ascii=False),
+                    )
         return web.json_response({"status": "ok", "received": len(incoming)})
 
     async def register(request):
