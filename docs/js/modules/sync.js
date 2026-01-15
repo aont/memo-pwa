@@ -53,12 +53,16 @@ export function createSyncController({
   warn,
   err
 }) {
+  function normalizeEndpoint(endpoint) {
+    return endpoint.trim().replace(/\/+$/, "");
+  }
+
   function getEndpoint() {
     return localStorage.getItem(STORAGE_KEYS.serverEndpoint) || "";
   }
 
   function setEndpoint(endpoint) {
-    savePreference(STORAGE_KEYS.serverEndpoint, endpoint.trim());
+    savePreference(STORAGE_KEYS.serverEndpoint, normalizeEndpoint(endpoint));
   }
 
   function getToken() {
@@ -74,8 +78,51 @@ export function createSyncController({
     return { Authorization: `Bearer ${token}` };
   }
 
+  async function postAuth(endpoint, path, payload) {
+    const base = normalizeEndpoint(endpoint);
+    if (!base) {
+      throw new Error("Auth endpoint is not set.");
+    }
+    const res = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      let details = `${res.status}`;
+      try {
+        const body = await res.json();
+        if (body?.error) details = `${details} (${body.error})`;
+      } catch {
+        // Ignore JSON parse errors.
+      }
+      throw new Error(`Auth failed: ${details}`);
+    }
+    return res.json();
+  }
+
+  async function registerUser({ endpoint, username, password }) {
+    const payload = await postAuth(endpoint, "/auth/register", { username, password });
+    if (!payload?.token) {
+      throw new Error("Register failed: token missing.");
+    }
+    return payload.token;
+  }
+
+  async function loginUser({ endpoint, username, password }) {
+    const payload = await postAuth(endpoint, "/auth/login", { username, password });
+    if (!payload?.token) {
+      throw new Error("Login failed: token missing.");
+    }
+    return payload.token;
+  }
+
   async function fetchServerNotes(endpoint, token) {
-    const res = await fetch(`${endpoint}/notes`, {
+    const base = normalizeEndpoint(endpoint);
+    if (!base) {
+      throw new Error("Sync endpoint is not set.");
+    }
+    const res = await fetch(`${base}/notes`, {
       method: "GET",
       headers: buildAuthHeaders(token)
     });
@@ -88,7 +135,11 @@ export function createSyncController({
   }
 
   async function pushNotes(endpoint, notes, token) {
-    const res = await fetch(`${endpoint}/notes`, {
+    const base = normalizeEndpoint(endpoint);
+    if (!base) {
+      throw new Error("Sync endpoint is not set.");
+    }
+    const res = await fetch(`${base}/notes`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -120,7 +171,7 @@ export function createSyncController({
   }
 
   async function syncNow({ endpoint, token }) {
-    const base = endpoint.trim().replace(/\/+$/, "");
+    const base = normalizeEndpoint(endpoint);
     if (!base) {
       warn("Sync: endpoint not set");
       throw new Error("Sync endpoint is not set.");
@@ -204,6 +255,8 @@ export function createSyncController({
     setEndpoint,
     getToken,
     setToken,
+    registerUser,
+    loginUser,
     syncNow
   };
 }

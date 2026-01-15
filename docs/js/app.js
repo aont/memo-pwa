@@ -79,6 +79,10 @@ import { createSyncController } from "./modules/sync.js";
   const importFile = document.getElementById("importFile");
   const syncEndpointInput = document.getElementById("syncEndpointInput");
   const syncTokenInput = document.getElementById("syncTokenInput");
+  const syncUsernameInput = document.getElementById("syncUsernameInput");
+  const syncPasswordInput = document.getElementById("syncPasswordInput");
+  const syncRegisterBtn = document.getElementById("syncRegisterBtn");
+  const syncLoginBtn = document.getElementById("syncLoginBtn");
   const syncSaveBtn = document.getElementById("syncSaveBtn");
   const syncNowBtn = document.getElementById("syncNowBtn");
   const syncStatus = document.getElementById("syncStatus");
@@ -215,18 +219,19 @@ import { createSyncController } from "./modules/sync.js";
     history
   });
 
-  const { getEndpoint, setEndpoint, getToken, setToken, syncNow } = createSyncController({
-    state,
-    ensureNoteVersioning,
-    recordVersionForNote,
-    refreshNoteSelect,
-    loadCurrentNoteToEditor,
-    setSavedState,
-    schedulePersist,
-    log,
-    warn,
-    err
-  });
+  const { getEndpoint, setEndpoint, getToken, setToken, registerUser, loginUser, syncNow } =
+    createSyncController({
+      state,
+      ensureNoteVersioning,
+      recordVersionForNote,
+      refreshNoteSelect,
+      loadCurrentNoteToEditor,
+      setSavedState,
+      schedulePersist,
+      log,
+      warn,
+      err
+    });
 
   // =========================
   // Dialog helpers
@@ -386,6 +391,8 @@ import { createSyncController } from "./modules/sync.js";
     closeMenus();
     syncEndpointInput.value = getEndpoint();
     syncTokenInput.value = getToken();
+    syncUsernameInput.value = "";
+    syncPasswordInput.value = "";
     syncStatus.textContent = "";
     openOverlayById("syncOverlay");
     syncEndpointInput.focus();
@@ -507,8 +514,39 @@ import { createSyncController } from "./modules/sync.js";
   syncSaveBtn.addEventListener("click", () => {
     setEndpoint(syncEndpointInput.value);
     setToken(syncTokenInput.value);
-    syncStatus.textContent = "Endpoint saved.";
+    syncStatus.textContent = "Settings saved.";
   });
+
+  async function handleAuth(action) {
+    const endpoint = syncEndpointInput.value.trim();
+    const username = syncUsernameInput.value.trim();
+    const password = syncPasswordInput.value;
+    if (!endpoint) {
+      syncStatus.textContent = "Set the server endpoint first.";
+      return;
+    }
+    if (!username || !password) {
+      syncStatus.textContent = "Enter a username and password.";
+      return;
+    }
+    syncStatus.textContent = action === "register" ? "Registering…" : "Logging in…";
+    try {
+      const token =
+        action === "register"
+          ? await registerUser({ endpoint, username, password })
+          : await loginUser({ endpoint, username, password });
+      syncTokenInput.value = token;
+      setEndpoint(endpoint);
+      setToken(token);
+      syncStatus.textContent = action === "register" ? "Registered. Token saved." : "Logged in. Token saved.";
+    } catch (e) {
+      err("auth failed", { message: e?.message });
+      syncStatus.textContent = "Auth failed. Check the log.";
+    }
+  }
+
+  syncRegisterBtn.addEventListener("click", () => handleAuth("register"));
+  syncLoginBtn.addEventListener("click", () => handleAuth("login"));
 
   syncNowBtn.addEventListener("click", async () => {
     setEndpoint(syncEndpointInput.value);

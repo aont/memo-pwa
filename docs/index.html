@@ -326,6 +326,23 @@
       color: var(--muted); 
       line-height: 1.35; 
     } 
+    .dialog-section{ 
+      margin-top: 12px; 
+      padding-top: 12px; 
+      border-top: 1px solid var(--line); 
+    } 
+    .dialog-section:first-child{ 
+      margin-top: 0; 
+      padding-top: 0; 
+      border-top: 0; 
+    } 
+    .section-title{ 
+      font-size: 12px; 
+      color: var(--muted); 
+      letter-spacing: 0.02em; 
+      text-transform: uppercase; 
+      margin-bottom: 6px; 
+    } 
   </style> 
 </head> 
 <body> 
@@ -486,15 +503,35 @@
         <button class="btn" data-close="syncOverlay">Close</button> 
       </div> 
       <div class="dialog-body"> 
-        <div class="dialog-row"> 
-          <input id="syncEndpointInput" class="input" type="url" placeholder="Server endpoint (e.g., https://example.com)" /> 
+        <div class="dialog-section"> 
+          <div class="section-title">Server</div> 
+          <div class="dialog-row"> 
+            <input id="syncEndpointInput" class="input" type="url" placeholder="Server endpoint (e.g., https://example.com)" /> 
+          </div> 
         </div> 
-        <div class="dialog-row"> 
-          <input id="syncTokenInput" class="input" type="password" placeholder="Auth token (Bearer)" /> 
+        <div class="dialog-section"> 
+          <div class="section-title">Account</div> 
+          <div class="dialog-row"> 
+            <input id="syncUsernameInput" class="input" type="text" autocomplete="username" placeholder="Username" /> 
+          </div> 
+          <div class="dialog-row"> 
+            <input id="syncPasswordInput" class="input" type="password" autocomplete="current-password" placeholder="Password" /> 
+          </div> 
+          <div class="dialog-row"> 
+            <button class="btn" id="syncRegisterBtn">Register</button> 
+            <button class="btn primary" id="syncLoginBtn">Login</button> 
+          </div> 
+          <div class="hint">Register creates a new user. Login will fetch a new token.</div> 
         </div> 
-        <div class="dialog-row"> 
-          <button class="btn" id="syncSaveBtn">Save Endpoint</button> 
-          <button class="btn primary" id="syncNowBtn">Sync Now</button> 
+        <div class="dialog-section"> 
+          <div class="section-title">Token</div> 
+          <div class="dialog-row"> 
+            <input id="syncTokenInput" class="input" type="password" placeholder="Auth token (Bearer)" /> 
+          </div> 
+          <div class="dialog-row"> 
+            <button class="btn" id="syncSaveBtn">Save Settings</button> 
+            <button class="btn primary" id="syncNowBtn">Sync Now</button> 
+          </div> 
         </div> 
         <div class="hint" id="syncStatus"></div> 
         <div class="hint">Sync is manual. Offline usage remains the default.</div> 
