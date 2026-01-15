@@ -78,6 +78,7 @@ import { createSyncController } from "./modules/sync.js";
 
   const importFile = document.getElementById("importFile");
   const syncEndpointInput = document.getElementById("syncEndpointInput");
+  const syncTokenInput = document.getElementById("syncTokenInput");
   const syncSaveBtn = document.getElementById("syncSaveBtn");
   const syncNowBtn = document.getElementById("syncNowBtn");
   const syncStatus = document.getElementById("syncStatus");
@@ -214,7 +215,7 @@ import { createSyncController } from "./modules/sync.js";
     history
   });
 
-  const { getEndpoint, setEndpoint, syncNow } = createSyncController({
+  const { getEndpoint, setEndpoint, getToken, setToken, syncNow } = createSyncController({
     state,
     ensureNoteVersioning,
     recordVersionForNote,
@@ -384,6 +385,7 @@ import { createSyncController } from "./modules/sync.js";
   mSync.addEventListener("click", () => {
     closeMenus();
     syncEndpointInput.value = getEndpoint();
+    syncTokenInput.value = getToken();
     syncStatus.textContent = "";
     openOverlayById("syncOverlay");
     syncEndpointInput.focus();
@@ -504,16 +506,18 @@ import { createSyncController } from "./modules/sync.js";
 
   syncSaveBtn.addEventListener("click", () => {
     setEndpoint(syncEndpointInput.value);
+    setToken(syncTokenInput.value);
     syncStatus.textContent = "Endpoint saved.";
   });
 
   syncNowBtn.addEventListener("click", async () => {
     setEndpoint(syncEndpointInput.value);
+    setToken(syncTokenInput.value);
     syncStatus.textContent = "Syncing…";
     try {
       updateCurrentNoteTextFromEditor();
       recordVersionForNote(state.currentId, { force: true });
-      await syncNow({ endpoint: syncEndpointInput.value });
+      await syncNow({ endpoint: syncEndpointInput.value, token: syncTokenInput.value });
       syncStatus.textContent = "Sync completed.";
     } catch (e) {
       err("syncNow failed", { message: e?.message });

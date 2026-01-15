@@ -61,8 +61,24 @@ export function createSyncController({
     savePreference(STORAGE_KEYS.serverEndpoint, endpoint.trim());
   }
 
-  async function fetchServerNotes(endpoint) {
-    const res = await fetch(`${endpoint}/notes`, { method: "GET" });
+  function getToken() {
+    return localStorage.getItem(STORAGE_KEYS.serverToken) || "";
+  }
+
+  function setToken(token) {
+    savePreference(STORAGE_KEYS.serverToken, token.trim());
+  }
+
+  function buildAuthHeaders(token) {
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  async function fetchServerNotes(endpoint, token) {
+    const res = await fetch(`${endpoint}/notes`, {
+      method: "GET",
+      headers: buildAuthHeaders(token)
+    });
     if (!res.ok) {
       throw new Error(`Server responded ${res.status}`);
     }
@@ -71,10 +87,13 @@ export function createSyncController({
     return notes.map((note) => normalizeNote(note));
   }
 
-  async function pushNotes(endpoint, notes) {
+  async function pushNotes(endpoint, notes, token) {
     const res = await fetch(`${endpoint}/notes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(token)
+      },
       body: JSON.stringify({ notes })
     });
     if (!res.ok) {
@@ -100,7 +119,7 @@ export function createSyncController({
     return copy;
   }
 
-  async function syncNow({ endpoint }) {
+  async function syncNow({ endpoint, token }) {
     const base = endpoint.trim().replace(/\/+$/, "");
     if (!base) {
       warn("Sync: endpoint not set");
@@ -114,7 +133,7 @@ export function createSyncController({
       recordVersionForNote(note.id, { force: false });
     }
 
-    const serverNotes = await fetchServerNotes(base);
+    const serverNotes = await fetchServerNotes(base, token);
     const serverById = new Map(serverNotes.map((note) => [note.id, note]));
     const localById = new Map(state.db.notes.map((note) => [note.id, note]));
     const toUpload = [];
@@ -169,7 +188,7 @@ export function createSyncController({
     }
 
     if (toUpload.length) {
-      await pushNotes(base, toUpload);
+      await pushNotes(base, toUpload, token);
     }
 
     refreshNoteSelect();
@@ -183,6 +202,8 @@ export function createSyncController({
   return {
     getEndpoint,
     setEndpoint,
+    getToken,
+    setToken,
     syncNow
   };
 }

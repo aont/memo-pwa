@@ -7,7 +7,8 @@ export const STORAGE_KEYS = {
   caseSensitive: "memo:case:v1",
   regex: "memo:regex:v1",
   logUi: "memo:logui:v1",
-  serverEndpoint: "memo:server:endpoint:v1"
+  serverEndpoint: "memo:server:endpoint:v1",
+  serverToken: "memo:server:token:v1"
 };
 
 function normalizeVersion(version, fallbackText) {

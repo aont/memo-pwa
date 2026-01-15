@@ -10,17 +10,44 @@ In practice, this page functions as a minimal note-taking app that can run in a 
 
 The app now keeps a version history per memo and can sync to a server on demand. Sync is manual-only (offline-first), and users can configure the server endpoint inside the PWA via **File → Sync…**. When syncing, fast-forward histories update directly, while divergent histories create a renamed local copy that is also uploaded to the server.
 
-To run the optional asyncio + aiohttp sync server:
+To run the optional asyncio + aiohttp sync server with authentication enabled:
 
 ```bash
 python server/memo_server.py --host 0.0.0.0 --port 8080 --data memo_server.json
 ```
 
-The server exposes:
+The server exposes (multi-user, token auth):
 
-* `GET /notes` → returns all notes (with versions)
-* `POST /notes` → upserts notes
+* `POST /auth/register` → create a new user and receive a token (disabled with `--disable-register`)
+* `POST /auth/login` → get a new token for an existing user
+* `POST /auth/logout` → revoke the current token
+* `GET /auth/me` → return the authenticated user
+* `GET /notes` → returns the authenticated user’s notes (with versions)
+* `POST /notes` → upserts notes for the authenticated user
 * `GET /health` → health check
+
+Use the issued token in the `Authorization` header:
+
+```bash
+curl -X POST http://localhost:8080/auth/register \\
+  -H 'Content-Type: application/json' \\
+  -d '{"username":"alice","password":"secret"}'
+
+curl http://localhost:8080/notes \\
+  -H 'Authorization: Bearer <token>'
+```
+
+### TLS termination behind a reverse proxy
+
+If your PWA is served over HTTPS and you terminate TLS at a reverse proxy, run the server in HTTP
+mode and enable HTTPS enforcement with trusted proxy headers:
+
+```bash
+python server/memo_server.py --host 0.0.0.0 --port 8080 --require-https --trust-proxy
+```
+
+Your reverse proxy should forward `X-Forwarded-Proto: https` so the server can recognize secure
+requests while still accepting non-TLS traffic from the proxy.
 
 ## User Interface Structure
 
