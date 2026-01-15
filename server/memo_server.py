@@ -4,11 +4,12 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
+import asyncpg
 from aiohttp import web
 
 SCHEMA_VERSION = 2
@@ -18,6 +19,21 @@ TOKEN_BYTES = 32
 
 def now_iso():
     return datetime.now(tz=timezone.utc).isoformat()
+
+
+def now_utc():
+    return datetime.now(tz=timezone.utc)
+
+
+def ensure_datetime(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return now_utc()
+    return now_utc()
 
 
 def normalize_version(version, fallback_text):
@@ -52,41 +68,6 @@ def normalize_note(note):
         "createdAt": created_at,
         "updatedAt": updated_at,
         "versions": versions,
-    }
-
-
-def normalize_token(token):
-    if not isinstance(token, dict):
-        return None
-    token_value = token.get("token") if isinstance(token.get("token"), str) else None
-    if not token_value:
-        return None
-    created_at = token.get("createdAt") if isinstance(token.get("createdAt"), str) else now_iso()
-    last_used = token.get("lastUsedAt") if isinstance(token.get("lastUsedAt"), str) else created_at
-    return {
-        "token": token_value,
-        "createdAt": created_at,
-        "lastUsedAt": last_used,
-    }
-
-
-def normalize_user(user):
-    if not isinstance(user, dict):
-        user = {}
-    user_id = user.get("id") if isinstance(user.get("id"), str) else f"u_{time.time()}"
-    username = user.get("username") if isinstance(user.get("username"), str) else "user"
-    password_hash = user.get("passwordHash") if isinstance(user.get("passwordHash"), str) else None
-    salt = user.get("salt") if isinstance(user.get("salt"), str) else None
-    created_at = user.get("createdAt") if isinstance(user.get("createdAt"), str) else now_iso()
-    tokens_raw = user.get("tokens") if isinstance(user.get("tokens"), list) else []
-    tokens = [t for t in (normalize_token(t) for t in tokens_raw) if t]
-    return {
-        "id": user_id,
-        "username": username,
-        "passwordHash": password_hash,
-        "salt": salt,
-        "createdAt": created_at,
-        "tokens": tokens,
     }
 
 
@@ -133,22 +114,6 @@ def issue_token(user):
     return token
 
 
-def find_user_by_username(users, username):
-    for user in users:
-        if user.get("username") == username:
-            return user
-    return None
-
-
-def find_user_by_token(users, token):
-    for user in users:
-        for entry in user.get("tokens", []):
-            if entry.get("token") == token:
-                entry["lastUsedAt"] = now_iso()
-                return user
-    return None
-
-
 def parse_basic_auth(auth_value):
     if not auth_value.startswith("Basic "):
         return None
@@ -163,18 +128,18 @@ def parse_basic_auth(auth_value):
     return username, password
 
 
-def authenticate_request(request, db):
+async def authenticate_request(request, db):
     auth_value = request.headers.get("Authorization", "")
     if auth_value.startswith("Bearer "):
         token = auth_value.split(" ", 1)[1].strip()
         if not token:
             return None, None
-        user = find_user_by_token(db.get("users", []), token)
+        user = await find_user_by_token(db, token)
         return user, token
     basic_creds = parse_basic_auth(auth_value)
     if basic_creds:
         username, password = basic_creds
-        user = find_user_by_username(db.get("users", []), username)
+        user = await find_user_by_username(db, username)
         if user and verify_password(password, user.get("salt"), user.get("passwordHash")):
             return user, None
     return None, None
@@ -188,53 +153,123 @@ def get_request_scheme(request):
     return request.scheme
 
 
-def bootstrap_user(username):
-    user = {
-        "id": f"u_{time.time()}",
-        "username": username,
-        "passwordHash": None,
-        "salt": None,
-        "createdAt": now_iso(),
-        "tokens": [],
+def row_to_user(row):
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "passwordHash": row["password_hash"],
+        "salt": row["salt"],
+        "createdAt": row["created_at"].isoformat() if row["created_at"] else now_iso(),
     }
-    token = issue_token(user)
-    return user, token
 
 
-async def load_db(path: Path):
-    if not path.exists():
-        return {"schema": SCHEMA_VERSION, "users": [], "notesByUser": {}}, None
-    data = await asyncio.to_thread(path.read_text, encoding="utf-8")
-    try:
-        parsed = json.loads(data)
-    except json.JSONDecodeError:
-        return {"schema": SCHEMA_VERSION, "users": [], "notesByUser": {}}, None
-    if not isinstance(parsed, dict):
-        return {"schema": SCHEMA_VERSION, "users": [], "notesByUser": {}}, None
-    schema = parsed.get("schema", 1)
-    if schema == 1:
-        notes = parsed.get("notes") if isinstance(parsed.get("notes"), list) else []
-        normalized_notes = [normalize_note(note) for note in notes]
-        user, token = bootstrap_user("legacy")
-        return (
-            {"schema": SCHEMA_VERSION, "users": [user], "notesByUser": {user["id"]: normalized_notes}},
+async def ensure_schema(pool):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT,
+                salt TEXT,
+                created_at TIMESTAMPTZ NOT NULL
+            )
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tokens (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL,
+                last_used_at TIMESTAMPTZ NOT NULL
+            )
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notes (
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                note_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
+                versions JSONB NOT NULL,
+                PRIMARY KEY (user_id, note_id)
+            )
+            """
+        )
+
+
+async def find_user_by_username(pool, username):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, username, password_hash, salt, created_at
+            FROM users
+            WHERE username = $1
+            """,
+            username,
+        )
+    return row_to_user(row)
+
+
+async def find_user_by_token(pool, token):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT u.id, u.username, u.password_hash, u.salt, u.created_at
+            FROM tokens t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.token = $1
+            """,
             token,
         )
-    users_raw = parsed.get("users") if isinstance(parsed.get("users"), list) else []
-    users = [normalize_user(user) for user in users_raw]
-    notes_by_user_raw = parsed.get("notesByUser") if isinstance(parsed.get("notesByUser"), dict) else {}
-    notes_by_user = {}
-    for user in users:
-        raw_notes = notes_by_user_raw.get(user["id"], [])
-        if not isinstance(raw_notes, list):
-            raw_notes = []
-        notes_by_user[user["id"]] = [normalize_note(note) for note in raw_notes]
-    return {"schema": SCHEMA_VERSION, "users": users, "notesByUser": notes_by_user}, None
+        if row:
+            await conn.execute(
+                """
+                UPDATE tokens
+                SET last_used_at = $1
+                WHERE token = $2
+                """,
+                now_utc(),
+                token,
+            )
+    return row_to_user(row)
 
 
-async def save_db(path: Path, db: dict):
-    payload = json.dumps(db, ensure_ascii=False, indent=2)
-    await asyncio.to_thread(path.write_text, payload, encoding="utf-8")
+async def insert_user(pool, user):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO users (id, username, password_hash, salt, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            user["id"],
+            user["username"],
+            user["passwordHash"],
+            user["salt"],
+            ensure_datetime(user["createdAt"]),
+        )
+
+
+async def insert_token(pool, user_id, token):
+    now = now_utc()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO tokens (token, user_id, created_at, last_used_at)
+            VALUES ($1, $2, $3, $4)
+            """,
+            token,
+            user_id,
+            now,
+            now,
+        )
+    return token
 
 
 @web.middleware
@@ -260,7 +295,7 @@ async def https_middleware(request, handler):
 async def auth_middleware(request, handler):
     if request.path in {"/health", "/auth/login", "/auth/register"}:
         return await handler(request)
-    user, token = authenticate_request(request, request.app["db"])
+    user, token = await authenticate_request(request, request.app["db"])
     if not user:
         return web.json_response({"error": "unauthorized"}, status=401)
     request["user"] = user
@@ -268,25 +303,40 @@ async def auth_middleware(request, handler):
     return await handler(request)
 
 
-async def create_app(data_path: Path, require_https=False, trust_proxy=False, allow_register=True):
-    lock = asyncio.Lock()
-    db, bootstrap_token = await load_db(data_path)
-    if bootstrap_token:
-        print("Migrated legacy notes into 'legacy' user.")
-        print("Use this token to access notes:")
-        print(bootstrap_token)
+async def create_app(pool, require_https=False, trust_proxy=False, allow_register=True):
+    await ensure_schema(pool)
     app = web.Application(middlewares=[cors_middleware, https_middleware, auth_middleware])
-    app["db"] = db
-    app["lock"] = lock
+    app["db"] = pool
     app["require_https"] = require_https
     app["trust_proxy"] = trust_proxy
     app["allow_register"] = allow_register
 
     async def get_notes(request):
         user = request["user"]
-        async with lock:
-            notes = db.get("notesByUser", {}).get(user["id"], [])
-            return web.json_response({"schema": SCHEMA_VERSION, "notes": notes})
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT note_id, title, text, created_at, updated_at, versions
+                FROM notes
+                WHERE user_id = $1
+                """,
+                user["id"],
+            )
+        notes = []
+        for row in rows:
+            versions = row["versions"] if isinstance(row["versions"], list) else []
+            note = normalize_note(
+                {
+                    "id": row["note_id"],
+                    "title": row["title"],
+                    "text": row["text"],
+                    "createdAt": row["created_at"].isoformat() if row["created_at"] else now_iso(),
+                    "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else now_iso(),
+                    "versions": versions,
+                }
+            )
+            notes.append(note)
+        return web.json_response({"schema": SCHEMA_VERSION, "notes": notes})
 
     async def post_notes(request):
         user = request["user"]
@@ -298,14 +348,37 @@ async def create_app(data_path: Path, require_https=False, trust_proxy=False, al
         if not isinstance(notes, list):
             return web.json_response({"error": "notes_required"}, status=400)
         incoming = [normalize_note(note) for note in notes]
-        async with lock:
-            user_notes = db.setdefault("notesByUser", {}).setdefault(user["id"], [])
-            existing = {note["id"]: note for note in user_notes}
-            for note in incoming:
-                existing[note["id"]] = note
-            db["notesByUser"][user["id"]] = list(existing.values())
-            db["schema"] = SCHEMA_VERSION
-            await save_db(data_path, db)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                for note in incoming:
+                    await conn.execute(
+                        """
+                        INSERT INTO notes (
+                            user_id,
+                            note_id,
+                            title,
+                            text,
+                            created_at,
+                            updated_at,
+                            versions
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+                        ON CONFLICT (user_id, note_id)
+                        DO UPDATE SET
+                            title = EXCLUDED.title,
+                            text = EXCLUDED.text,
+                            created_at = EXCLUDED.created_at,
+                            updated_at = EXCLUDED.updated_at,
+                            versions = EXCLUDED.versions
+                        """,
+                        user["id"],
+                        note["id"],
+                        note["title"],
+                        note["text"],
+                        ensure_datetime(note["createdAt"]),
+                        ensure_datetime(note["updatedAt"]),
+                        json.dumps(note["versions"], ensure_ascii=False),
+                    )
         return web.json_response({"status": "ok", "received": len(incoming)})
 
     async def register(request):
@@ -321,15 +394,13 @@ async def create_app(data_path: Path, require_https=False, trust_proxy=False, al
             return web.json_response({"error": "username_required"}, status=400)
         if not isinstance(password, str) or not password:
             return web.json_response({"error": "password_required"}, status=400)
-        async with lock:
-            if find_user_by_username(db.get("users", []), username):
-                return web.json_response({"error": "user_exists"}, status=409)
-            user = create_user(username.strip(), password)
-            token = issue_token(user)
-            db.setdefault("users", []).append(user)
-            db.setdefault("notesByUser", {})[user["id"]] = []
-            db["schema"] = SCHEMA_VERSION
-            await save_db(data_path, db)
+        existing = await find_user_by_username(pool, username.strip())
+        if existing:
+            return web.json_response({"error": "user_exists"}, status=409)
+        user = create_user(username.strip(), password)
+        token = issue_token(user)
+        await insert_user(pool, user)
+        await insert_token(pool, user["id"], token)
         return web.json_response(
             {
                 "status": "ok",
@@ -347,13 +418,11 @@ async def create_app(data_path: Path, require_https=False, trust_proxy=False, al
         password = payload.get("password") if isinstance(payload, dict) else None
         if not isinstance(username, str) or not isinstance(password, str):
             return web.json_response({"error": "invalid_credentials"}, status=400)
-        async with lock:
-            user = find_user_by_username(db.get("users", []), username)
-            if not user or not verify_password(password, user.get("salt"), user.get("passwordHash")):
-                return web.json_response({"error": "invalid_credentials"}, status=401)
-            token = issue_token(user)
-            db["schema"] = SCHEMA_VERSION
-            await save_db(data_path, db)
+        user = await find_user_by_username(pool, username)
+        if not user or not verify_password(password, user.get("salt"), user.get("passwordHash")):
+            return web.json_response({"error": "invalid_credentials"}, status=401)
+        token = issue_token(user)
+        await insert_token(pool, user["id"], token)
         return web.json_response(
             {
                 "status": "ok",
@@ -363,14 +432,11 @@ async def create_app(data_path: Path, require_https=False, trust_proxy=False, al
         )
 
     async def logout(request):
-        user = request["user"]
         token = request.get("token")
         if not token:
             return web.json_response({"error": "token_required"}, status=400)
-        async with lock:
-            tokens = [t for t in user.get("tokens", []) if t.get("token") != token]
-            user["tokens"] = tokens
-            await save_db(data_path, db)
+        async with pool.acquire() as conn:
+            await conn.execute("DELETE FROM tokens WHERE token = $1", token)
         return web.json_response({"status": "ok"})
 
     async def me(request):
@@ -395,22 +461,31 @@ def main():
     parser = argparse.ArgumentParser(description="Memo PWA Sync Server (aiohttp).")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--data", default="memo_server.json")
+    parser.add_argument(
+        "--database-url",
+        default=os.environ.get("DATABASE_URL", "postgresql://localhost:5432/memo_pwa"),
+    )
     parser.add_argument("--require-https", action="store_true")
     parser.add_argument("--trust-proxy", action="store_true")
     parser.add_argument("--disable-register", action="store_true")
     args = parser.parse_args()
-    data_path = Path(args.data)
     allow_register = not args.disable_register
-    app = asyncio.run(
-        create_app(
-            data_path,
+    async def init_app():
+        pool = await asyncpg.create_pool(dsn=args.database_url)
+        app = await create_app(
+            pool,
             require_https=args.require_https,
             trust_proxy=args.trust_proxy,
             allow_register=allow_register,
         )
-    )
-    web.run_app(app, host=args.host, port=args.port)
+
+        async def close_pool(_app):
+            await pool.close()
+
+        app.on_cleanup.append(close_pool)
+        return app
+
+    web.run_app(init_app(), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

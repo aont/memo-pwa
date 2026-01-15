@@ -10,10 +10,36 @@ In practice, this page functions as a minimal note-taking app that can run in a 
 
 The app now keeps a version history per memo and can sync to a server on demand. Sync is manual-only (offline-first), and users can configure the server endpoint inside the PWA via **File → Sync…**. When syncing, fast-forward histories update directly, while divergent histories create a renamed local copy that is also uploaded to the server.
 
-To run the optional asyncio + aiohttp sync server with authentication enabled:
+To run the optional asyncio + aiohttp sync server with authentication enabled (backed by PostgreSQL via `asyncpg`):
 
 ```bash
-python server/memo_server.py --host 0.0.0.0 --port 8080 --data memo_server.json
+pip install asyncpg aiohttp
+python server/memo_server.py --host 0.0.0.0 --port 8080 \
+  --database-url postgresql://localhost:5432/memo_pwa
+```
+
+You can also set `DATABASE_URL` to avoid passing `--database-url` each time.
+
+### PostgreSQL setup
+
+Create a database (and optionally a dedicated user) before starting the server:
+
+```bash
+createdb memo_pwa
+```
+
+Optional: create a role and grant privileges:
+
+```bash
+createuser --pwprompt memo_pwa_user
+psql -d memo_pwa -c "GRANT ALL PRIVILEGES ON DATABASE memo_pwa TO memo_pwa_user;"
+psql -d memo_pwa -c "GRANT USAGE, CREATE ON SCHEMA public TO memo_pwa_user;"
+```
+
+Then point the server at the database:
+
+```bash
+export DATABASE_URL="postgresql://memo_pwa_user:<password>@localhost:5432/memo_pwa"
 ```
 
 The server exposes (multi-user, token auth):
