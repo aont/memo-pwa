@@ -13,6 +13,47 @@ export function createNotesController({
   log,
   confirmDelete = window.confirm
 }) {
+  const MIN_VERSION_INTERVAL_MS = 5000;
+
+  function ensureNoteVersioning(note) {
+    if (!note) return;
+    if (!Array.isArray(note.versions) || note.versions.length === 0) {
+      note.versions = [
+        {
+          id: uid(),
+          text: note.text || "",
+          createdAt: note.updatedAt || note.createdAt || nowIso()
+        }
+      ];
+      return;
+    }
+    note.versions = note.versions.map((version) => ({
+      id: typeof version?.id === "string" ? version.id : uid(),
+      text: typeof version?.text === "string" ? version.text : note.text || "",
+      createdAt:
+        typeof version?.createdAt === "string" ? version.createdAt : note.updatedAt || note.createdAt || nowIso()
+    }));
+  }
+
+  function getLastVersion(note) {
+    ensureNoteVersioning(note);
+    return note.versions[note.versions.length - 1];
+  }
+
+  function recordVersionForNote(noteId, { force = false } = {}) {
+    const note = getNoteById(noteId);
+    if (!note) return;
+    ensureNoteVersioning(note);
+    const last = getLastVersion(note);
+    const now = Date.now();
+    const lastTime = last?.createdAt ? Date.parse(last.createdAt) : 0;
+    if (!force && lastTime && now - lastTime < MIN_VERSION_INTERVAL_MS) return;
+    if (last && last.text === note.text) return;
+    note.versions.push({ id: uid(), text: note.text || "", createdAt: nowIso() });
+  }
+
+  state.db.notes.forEach((note) => ensureNoteVersioning(note));
+
   function sortNotes() {
     state.db.notes.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   }
@@ -20,7 +61,14 @@ export function createNotesController({
   function ensureAtLeastOneNote() {
     if (state.db.notes.length) return;
     const id = uid();
-    state.db.notes.push({ id, title: "New Memo", text: "", createdAt: nowIso(), updatedAt: nowIso() });
+    state.db.notes.push({
+      id,
+      title: "New Memo",
+      text: "",
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      versions: [{ id: uid(), text: "", createdAt: nowIso() }]
+    });
     state.currentId = id;
   }
 
@@ -33,6 +81,7 @@ export function createNotesController({
     if (!note) return;
     note.text = editor.value;
     note.updatedAt = nowIso();
+    ensureNoteVersioning(note);
     if (!silent) log("updateCurrentNoteTextFromEditor()", { noteId: state.currentId });
   }
 
@@ -53,6 +102,7 @@ export function createNotesController({
   function loadCurrentNoteToEditor() {
     const note = getNoteById(state.currentId);
     if (!note) return;
+    ensureNoteVersioning(note);
     editor.value = note.text || "";
     currentTitle.textContent = note.title || "Untitled";
     search.scheduleHighlight(true);
@@ -66,7 +116,14 @@ export function createNotesController({
   function createNote() {
     updateCurrentNoteTextFromEditor();
     const id = uid();
-    const note = { id, title: "New Memo", text: "", createdAt: nowIso(), updatedAt: nowIso() };
+    const note = {
+      id,
+      title: "New Memo",
+      text: "",
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      versions: [{ id: uid(), text: "", createdAt: nowIso() }]
+    };
     state.db.notes.unshift(note);
     state.currentId = id;
     refreshNoteSelect();
@@ -79,6 +136,7 @@ export function createNotesController({
   function switchNote(id) {
     if (!id || id === state.currentId) return;
     updateCurrentNoteTextFromEditor();
+    recordVersionForNote(state.currentId, { force: true });
     state.currentId = id;
     localStorage.setItem(STORAGE_KEYS.current, state.currentId);
     loadCurrentNoteToEditor();
@@ -88,6 +146,7 @@ export function createNotesController({
   function renameCurrent(title) {
     const note = getNoteById(state.currentId);
     if (!note) return;
+    ensureNoteVersioning(note);
     const nextTitle = title.trim() || "Untitled";
     note.title = nextTitle;
     note.updatedAt = nowIso();
@@ -122,6 +181,8 @@ export function createNotesController({
   return {
     ensureAtLeastOneNote,
     getNoteById,
+    ensureNoteVersioning,
+    recordVersionForNote,
     updateCurrentNoteTextFromEditor,
     refreshNoteSelect,
     loadCurrentNoteToEditor,

@@ -1,24 +1,46 @@
 import { nowIso, uid } from "./utils.js";
 
 export const STORAGE_KEYS = {
-  notes: "memo:notes:v2",
+  notes: "memo:notes:v3",
   current: "memo:current:v2",
   wrap: "memo:wrap:v1",
   caseSensitive: "memo:case:v1",
   regex: "memo:regex:v1",
-  logUi: "memo:logui:v1"
+  logUi: "memo:logui:v1",
+  serverEndpoint: "memo:server:endpoint:v1"
 };
 
+function normalizeVersion(version, fallbackText) {
+  const createdAt =
+    version?.createdAt && typeof version.createdAt === "string" ? version.createdAt : nowIso();
+  const text = typeof version?.text === "string" ? version.text : fallbackText;
+  const id = version?.id && typeof version.id === "string" ? version.id : uid();
+  return { id, text, createdAt };
+}
+
+function normalizeNote(note) {
+  const id = note?.id && typeof note.id === "string" ? note.id : uid();
+  const title = typeof note?.title === "string" ? note.title : "Untitled";
+  const text = typeof note?.text === "string" ? note.text : "";
+  const createdAt = note?.createdAt && typeof note.createdAt === "string" ? note.createdAt : nowIso();
+  const updatedAt = note?.updatedAt && typeof note.updatedAt === "string" ? note.updatedAt : nowIso();
+  const versionsRaw = Array.isArray(note?.versions) ? note.versions : [];
+  const versions = versionsRaw.length
+    ? versionsRaw.map((v) => normalizeVersion(v, text))
+    : [normalizeVersion(null, text)];
+  return { id, title, text, createdAt, updatedAt, versions };
+}
+
 export function loadNotes(logger) {
-  let db = { version: 2, notes: [] };
+  let db = { version: 3, notes: [] };
   let currentId = null;
 
-  const raw = localStorage.getItem(STORAGE_KEYS.notes);
+  const raw = localStorage.getItem(STORAGE_KEYS.notes) || localStorage.getItem("memo:notes:v2");
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.notes)) {
-        db = { version: 2, notes: parsed.notes };
+        db = { version: 3, notes: parsed.notes.map((note) => normalizeNote(note)) };
         logger?.log?.("DB loaded", { notes: db.notes.length });
       }
     } catch (e) {
@@ -29,13 +51,15 @@ export function loadNotes(logger) {
   const legacy = localStorage.getItem("memo:text:v1");
   if (legacy != null && db.notes.length === 0) {
     const id = uid();
-    db.notes.push({
-      id,
-      title: "Migrated Memo",
-      text: legacy,
-      createdAt: nowIso(),
-      updatedAt: nowIso()
-    });
+    db.notes.push(
+      normalizeNote({
+        id,
+        title: "Migrated Memo",
+        text: legacy,
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      })
+    );
     currentId = id;
     logger?.log?.("Migrated legacy memo:text:v1");
   }

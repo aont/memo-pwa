@@ -343,6 +343,9 @@
         <button class="menu-item" id="mExportAll" role="menuitem">Export All…</button> 
         <button class="menu-item" id="mImport" role="menuitem">Import…</button> 
         <div class="menu-sep"></div> 
+        <button class="menu-item" id="mSync" role="menuitem">Sync…</button> 
+        <button class="menu-item" id="mVersions" role="menuitem">Versions…</button> 
+        <div class="menu-sep"></div> 
         <button class="menu-item" id="mDelete" role="menuitem">Delete Memo…</button> 
       </div> 
     </div> 
@@ -471,6 +474,46 @@
           <button class="btn" id="clearBtn">Clear Text</button> 
         </div> 
         <div class="hint">Replace affects the current match only; Replace All affects every match.</div> 
+      </div> 
+    </div> 
+  </div> 
+
+  <!-- Sync dialog --> 
+  <div class="overlay" id="syncOverlay" aria-hidden="true"> 
+    <div class="dialog" role="dialog" aria-label="Sync"> 
+      <div class="dialog-header"> 
+        <div class="dialog-title">Sync</div> 
+        <button class="btn" data-close="syncOverlay">Close</button> 
+      </div> 
+      <div class="dialog-body"> 
+        <div class="dialog-row"> 
+          <input id="syncEndpointInput" class="input" type="url" placeholder="Server endpoint (e.g., https://example.com)" /> 
+        </div> 
+        <div class="dialog-row"> 
+          <button class="btn" id="syncSaveBtn">Save Endpoint</button> 
+          <button class="btn primary" id="syncNowBtn">Sync Now</button> 
+        </div> 
+        <div class="hint" id="syncStatus"></div> 
+        <div class="hint">Sync is manual. Offline usage remains the default.</div> 
+      </div> 
+    </div> 
+  </div> 
+
+  <!-- Versions dialog --> 
+  <div class="overlay" id="versionsOverlay" aria-hidden="true"> 
+    <div class="dialog" role="dialog" aria-label="Versions"> 
+      <div class="dialog-header"> 
+        <div class="dialog-title">Versions</div> 
+        <button class="btn" data-close="versionsOverlay">Close</button> 
+      </div> 
+      <div class="dialog-body"> 
+        <div class="dialog-row"> 
+          <select id="versionSelect" class="select" aria-label="Select version"></select> 
+        </div> 
+        <div class="dialog-row"> 
+          <button class="btn primary" id="versionRestoreBtn">Restore</button> 
+        </div> 
+        <div class="hint">Restoring creates a new version from current content.</div> 
       </div> 
     </div> 
   </div> 

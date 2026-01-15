@@ -19,14 +19,15 @@ export function createImportExportController({
 
     return {
       app: "memo-pwa",
-      schema: 1,
+      schema: 2,
       exportedAt: nowIso(),
       notes: notes.map((n) => ({
         id: n.id,
         title: n.title,
         text: n.text,
         createdAt: n.createdAt,
-        updatedAt: n.updatedAt
+        updatedAt: n.updatedAt,
+        versions: Array.isArray(n.versions) ? n.versions : []
       }))
     };
   }
@@ -65,7 +66,16 @@ export function createImportExportController({
     const text = (n?.text ?? "").toString();
     const createdAt = n?.createdAt && typeof n.createdAt === "string" ? n.createdAt : nowIso();
     const updatedAt = n?.updatedAt && typeof n.updatedAt === "string" ? n.updatedAt : nowIso();
-    return { title, text, createdAt, updatedAt };
+    const rawVersions = Array.isArray(n?.versions) ? n.versions : [];
+    const versions =
+      rawVersions.length > 0
+        ? rawVersions.map((version) => ({
+            id: typeof version?.id === "string" ? version.id : uid(),
+            text: typeof version?.text === "string" ? version.text : text,
+            createdAt: typeof version?.createdAt === "string" ? version.createdAt : updatedAt
+          }))
+        : [{ id: uid(), text, createdAt: updatedAt }];
+    return { title, text, createdAt, updatedAt, versions };
   }
 
   function importPayload(payload) {
@@ -91,7 +101,8 @@ export function createImportExportController({
         title: normalized.title,
         text: normalized.text,
         createdAt: normalized.createdAt,
-        updatedAt: normalized.updatedAt
+        updatedAt: normalized.updatedAt,
+        versions: normalized.versions
       });
       existingIds.add(id);
       imported += 1;

@@ -6,6 +6,22 @@ The provided content is a complete, self-contained web application that implemen
 
 In practice, this page functions as a minimal note-taking app that can run in a browser, save data locally, and behave like a standalone app when installed.
 
+## Manual Sync & Version History
+
+The app now keeps a version history per memo and can sync to a server on demand. Sync is manual-only (offline-first), and users can configure the server endpoint inside the PWA via **File → Sync…**. When syncing, fast-forward histories update directly, while divergent histories create a renamed local copy that is also uploaded to the server.
+
+To run the optional asyncio + aiohttp sync server:
+
+```bash
+python server/memo_server.py --host 0.0.0.0 --port 8080 --data memo_server.json
+```
+
+The server exposes:
+
+* `GET /notes` → returns all notes (with versions)
+* `POST /notes` → upserts notes
+* `GET /health` → health check
+
 ## User Interface Structure
 
 ### Menu Bar and App Status
@@ -39,8 +55,8 @@ A bottom panel shows a running log of internal actions and events (such as datab
 
 Memos are stored in a simple in-memory structure:
 
-* `db = { version: 2, notes: [] }`
-* Each note contains an `id`, `title`, `text`, `createdAt`, and `updatedAt`
+* `db = { version: 3, notes: [] }`
+* Each note contains an `id`, `title`, `text`, `createdAt`, `updatedAt`, and `versions`
 
 This database is serialized to `localStorage` under a versioned key. The app also stores the currently selected memo ID and UI preferences (wrap mode, search options, and log visibility).
 

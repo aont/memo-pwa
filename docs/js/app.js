@@ -6,6 +6,7 @@ import { STORAGE_KEYS, loadNotes, loadPreferences, saveNotes, savePreference } f
 import { setupPwa } from "./modules/pwa.js";
 import { createNotesController } from "./modules/notes.js";
 import { createImportExportController } from "./modules/importExport.js";
+import { createSyncController } from "./modules/sync.js";
 
 (() => {
   // =========================
@@ -45,12 +46,16 @@ import { createImportExportController } from "./modules/importExport.js";
   const mExportAll = document.getElementById("mExportAll");
   const mImport = document.getElementById("mImport");
   const mDelete = document.getElementById("mDelete");
+  const mSync = document.getElementById("mSync");
+  const mVersions = document.getElementById("mVersions");
 
   // Dialogs & UI
   const openOverlay = document.getElementById("openOverlay");
   const renameOverlay = document.getElementById("renameOverlay");
   const findOverlay = document.getElementById("findOverlay");
   const replaceOverlay = document.getElementById("replaceOverlay");
+  const syncOverlay = document.getElementById("syncOverlay");
+  const versionsOverlay = document.getElementById("versionsOverlay");
 
   const noteSelect = document.getElementById("noteSelect");
   const openApplyBtn = document.getElementById("openApplyBtn");
@@ -72,6 +77,13 @@ import { createImportExportController } from "./modules/importExport.js";
   const clearBtn = document.getElementById("clearBtn");
 
   const importFile = document.getElementById("importFile");
+  const syncEndpointInput = document.getElementById("syncEndpointInput");
+  const syncSaveBtn = document.getElementById("syncSaveBtn");
+  const syncNowBtn = document.getElementById("syncNowBtn");
+  const syncStatus = document.getElementById("syncStatus");
+
+  const versionSelect = document.getElementById("versionSelect");
+  const versionRestoreBtn = document.getElementById("versionRestoreBtn");
 
   // =========================
   // Logger
@@ -150,6 +162,7 @@ import { createImportExportController } from "./modules/importExport.js";
   // Persistence
   // =========================
   const persistNow = () => {
+    recordVersionForNote(state.currentId, { force: false });
     saveNotes(state.db, state.currentId);
     setSavedState("Saved");
     log("persistNow()", { notes: state.db.notes.length, currentId: state.currentId });
@@ -162,6 +175,8 @@ import { createImportExportController } from "./modules/importExport.js";
   const {
     ensureAtLeastOneNote,
     getNoteById,
+    ensureNoteVersioning,
+    recordVersionForNote,
     updateCurrentNoteTextFromEditor,
     refreshNoteSelect,
     loadCurrentNoteToEditor,
@@ -199,6 +214,19 @@ import { createImportExportController } from "./modules/importExport.js";
     history
   });
 
+  const { getEndpoint, setEndpoint, syncNow } = createSyncController({
+    state,
+    ensureNoteVersioning,
+    recordVersionForNote,
+    refreshNoteSelect,
+    loadCurrentNoteToEditor,
+    setSavedState,
+    schedulePersist,
+    log,
+    warn,
+    err
+  });
+
   // =========================
   // Dialog helpers
   // =========================
@@ -215,7 +243,7 @@ import { createImportExportController } from "./modules/importExport.js";
   }
 
   function closeAllOverlays() {
-    for (const id of ["openOverlay", "renameOverlay", "findOverlay", "replaceOverlay"]) {
+    for (const id of ["openOverlay", "renameOverlay", "findOverlay", "replaceOverlay", "syncOverlay", "versionsOverlay"]) {
       closeOverlayById(id);
     }
   }
@@ -225,7 +253,7 @@ import { createImportExportController } from "./modules/importExport.js";
     if (closeId) closeOverlayById(closeId);
   });
 
-  for (const ov of [openOverlay, renameOverlay, findOverlay, replaceOverlay]) {
+  for (const ov of [openOverlay, renameOverlay, findOverlay, replaceOverlay, syncOverlay, versionsOverlay]) {
     ov.addEventListener("click", (e) => {
       if (e.target === ov) ov.classList.remove("open");
     });
@@ -353,6 +381,18 @@ import { createImportExportController } from "./modules/importExport.js";
     closeMenus();
     deleteCurrent();
   });
+  mSync.addEventListener("click", () => {
+    closeMenus();
+    syncEndpointInput.value = getEndpoint();
+    syncStatus.textContent = "";
+    openOverlayById("syncOverlay");
+    syncEndpointInput.focus();
+  });
+  mVersions.addEventListener("click", () => {
+    closeMenus();
+    refreshVersionList();
+    openOverlayById("versionsOverlay");
+  });
 
   // =========================
   // Dialog actions
@@ -460,6 +500,59 @@ import { createImportExportController } from "./modules/importExport.js";
     importFile.value = "";
     if (!file) return;
     await importFromFile(file);
+  });
+
+  syncSaveBtn.addEventListener("click", () => {
+    setEndpoint(syncEndpointInput.value);
+    syncStatus.textContent = "Endpoint saved.";
+  });
+
+  syncNowBtn.addEventListener("click", async () => {
+    setEndpoint(syncEndpointInput.value);
+    syncStatus.textContent = "Syncing…";
+    try {
+      updateCurrentNoteTextFromEditor();
+      recordVersionForNote(state.currentId, { force: true });
+      await syncNow({ endpoint: syncEndpointInput.value });
+      syncStatus.textContent = "Sync completed.";
+    } catch (e) {
+      err("syncNow failed", { message: e?.message });
+      syncStatus.textContent = "Sync failed. Check the log.";
+    }
+  });
+
+  function refreshVersionList() {
+    const note = getNoteById(state.currentId);
+    if (!note) return;
+    ensureNoteVersioning(note);
+    versionSelect.innerHTML = "";
+    const versions = [...note.versions].reverse();
+    for (const version of versions) {
+      const opt = document.createElement("option");
+      const stamp = version.createdAt ? new Date(version.createdAt).toLocaleString() : "Unknown";
+      const snippet = (version.text || "").replace(/\s+/g, " ").slice(0, 40);
+      opt.value = version.id;
+      opt.textContent = `${stamp} — ${snippet || "(empty)"}`;
+      versionSelect.appendChild(opt);
+    }
+  }
+
+  versionRestoreBtn.addEventListener("click", () => {
+    const note = getNoteById(state.currentId);
+    if (!note) return;
+    ensureNoteVersioning(note);
+    const selectedId = versionSelect.value;
+    const version = note.versions.find((v) => v.id === selectedId);
+    if (!version) return;
+    if (!confirm("Restore this version? Current content will be saved as a new version.")) return;
+    recordVersionForNote(note.id, { force: true });
+    editor.value = version.text || "";
+    setSavedState("Saving…");
+    updateCurrentNoteTextFromEditor();
+    schedulePersist();
+    search.scheduleHighlight(true);
+    history.pushUndoSnapshot(state.currentId, history.snapshotFromEditor(editor));
+    refreshVersionList();
   });
 
   // =========================
