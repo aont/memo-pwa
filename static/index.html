@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memo PWA</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Memo Workspace</h1>
+        <div class="actions">
+          <button id="new-memo">New Memo</button>
+          <button id="sync">Sync</button>
+          <span id="sync-status" aria-live="polite"></span>
+        </div>
+      </header>
+      <main>
+        <aside>
+          <h2>My Memos</h2>
+          <ul id="memo-list"></ul>
+        </aside>
+        <section class="editor">
+          <div class="editor-header">
+            <input id="memo-title" type="text" placeholder="Memo title" />
+            <button id="save-version">Save Version</button>
+          </div>
+          <textarea id="memo-content" placeholder="Write your memo..."></textarea>
+          <div class="history">
+            <h3>History</h3>
+            <ul id="history-list"></ul>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
