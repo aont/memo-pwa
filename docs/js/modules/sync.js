@@ -1,11 +1,18 @@
 import { nowIso, uid } from "./utils.js";
 import { savePreference, STORAGE_KEYS } from "./storage.js";
 
-function normalizeVersion(version, fallbackText) {
-  const createdAt =
-    version?.createdAt && typeof version.createdAt === "string" ? version.createdAt : nowIso();
+function isValidIsoString(value) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+function normalizeVersion(version, fallbackText, fallbackCreatedAt, fallbackId) {
+  const createdAt = isValidIsoString(version?.createdAt)
+    ? version.createdAt
+    : isValidIsoString(fallbackCreatedAt)
+      ? fallbackCreatedAt
+      : nowIso();
   const text = typeof version?.text === "string" ? version.text : fallbackText;
-  const id = version?.id && typeof version.id === "string" ? version.id : uid();
+  const id = typeof version?.id === "string" ? version.id : fallbackId;
   return { id, text, createdAt };
 }
 
@@ -13,17 +20,32 @@ function normalizeNote(note) {
   const id = note?.id && typeof note.id === "string" ? note.id : uid();
   const title = typeof note?.title === "string" ? note.title : "Untitled";
   const text = typeof note?.text === "string" ? note.text : "";
-  const createdAt = note?.createdAt && typeof note.createdAt === "string" ? note.createdAt : nowIso();
-  const updatedAt = note?.updatedAt && typeof note.updatedAt === "string" ? note.updatedAt : nowIso();
+  const rawCreatedAt = typeof note?.createdAt === "string" ? note.createdAt : null;
+  const rawUpdatedAt = typeof note?.updatedAt === "string" ? note.updatedAt : null;
+  const createdAt = isValidIsoString(rawCreatedAt) ? rawCreatedAt : nowIso();
+  const updatedAt = isValidIsoString(rawUpdatedAt) ? rawUpdatedAt : nowIso();
+  const fallbackCreatedAt = isValidIsoString(rawUpdatedAt)
+    ? rawUpdatedAt
+    : isValidIsoString(rawCreatedAt)
+      ? rawCreatedAt
+      : nowIso();
   const versionsRaw = Array.isArray(note?.versions) ? note.versions : [];
   const versions = versionsRaw.length
-    ? versionsRaw.map((v) => normalizeVersion(v, text))
-    : [normalizeVersion(null, text)];
+    ? versionsRaw.map((v, index) =>
+        normalizeVersion(v, text, fallbackCreatedAt, `${id}-v${index}`)
+      )
+    : [normalizeVersion(null, text, fallbackCreatedAt, `${id}-v0`)];
   return { id, title, text, createdAt, updatedAt, versions };
 }
 
 function versionIds(note) {
   return Array.isArray(note?.versions) ? note.versions.map((v) => v.id) : [];
+}
+
+function noteUpdatedAt(note) {
+  const updatedAt = note?.updatedAt;
+  if (!isValidIsoString(updatedAt)) return 0;
+  return Date.parse(updatedAt);
 }
 
 function isPrefix(prefix, full) {
@@ -262,18 +284,29 @@ export function createSyncController({
       ensureNoteVersioning(localNote);
       const localVersions = versionIds(localNote);
       const serverVersions = versionIds(serverNote);
+      const localIsPrefix = isPrefix(localVersions, serverVersions);
+      const serverIsPrefix = isPrefix(serverVersions, localVersions);
 
-      if (localVersions.length === serverVersions.length && isPrefix(localVersions, serverVersions)) {
+      if (localIsPrefix && serverIsPrefix) {
+        const localUpdatedAt = noteUpdatedAt(localNote);
+        const serverUpdatedAt = noteUpdatedAt(serverNote);
+        if (serverUpdatedAt > localUpdatedAt) {
+          applyServerNote(localNote, serverNote);
+          localUpdates += 1;
+        } else if (localUpdatedAt > serverUpdatedAt) {
+          toUpload.push(cloneNote(localNote));
+          serverUpdates += 1;
+        }
         continue;
       }
 
-      if (isPrefix(localVersions, serverVersions)) {
+      if (localIsPrefix) {
         applyServerNote(localNote, serverNote);
         localUpdates += 1;
         continue;
       }
 
-      if (isPrefix(serverVersions, localVersions)) {
+      if (serverIsPrefix) {
         toUpload.push(cloneNote(localNote));
         serverUpdates += 1;
         continue;

@@ -39,14 +39,33 @@ def ensure_datetime(value):
     return now_utc()
 
 
-def normalize_version(version, fallback_text):
+def is_valid_iso_string(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def normalize_version(version, fallback_text, fallback_created_at, fallback_id):
     created_at = version.get("createdAt") if isinstance(version, dict) else None
     text = version.get("text") if isinstance(version, dict) else None
     version_id = version.get("id") if isinstance(version, dict) else None
+    normalized_created_at = (
+        created_at
+        if is_valid_iso_string(created_at)
+        else (
+            fallback_created_at
+            if is_valid_iso_string(fallback_created_at)
+            else now_iso()
+        )
+    )
     return {
-        "id": version_id if isinstance(version_id, str) else f"v_{time.time()}",
+        "id": version_id if isinstance(version_id, str) else fallback_id,
         "text": text if isinstance(text, str) else fallback_text,
-        "createdAt": created_at if isinstance(created_at, str) else now_iso(),
+        "createdAt": normalized_created_at,
     }
 
 
@@ -56,13 +75,25 @@ def normalize_note(note):
     note_id = note.get("id") if isinstance(note.get("id"), str) else f"n_{time.time()}"
     title = note.get("title") if isinstance(note.get("title"), str) else "Untitled"
     text = note.get("text") if isinstance(note.get("text"), str) else ""
-    created_at = note.get("createdAt") if isinstance(note.get("createdAt"), str) else now_iso()
-    updated_at = note.get("updatedAt") if isinstance(note.get("updatedAt"), str) else now_iso()
+    raw_created_at = note.get("createdAt") if isinstance(note.get("createdAt"), str) else None
+    raw_updated_at = note.get("updatedAt") if isinstance(note.get("updatedAt"), str) else None
+    created_at = raw_created_at if is_valid_iso_string(raw_created_at) else now_iso()
+    updated_at = raw_updated_at if is_valid_iso_string(raw_updated_at) else now_iso()
+    fallback_created_at = (
+        raw_updated_at
+        if is_valid_iso_string(raw_updated_at)
+        else raw_created_at
+        if is_valid_iso_string(raw_created_at)
+        else now_iso()
+    )
     versions_raw = note.get("versions") if isinstance(note.get("versions"), list) else []
     versions = (
-        [normalize_version(v, text) for v in versions_raw]
+        [
+            normalize_version(v, text, fallback_created_at, f"{note_id}-v{index}")
+            for index, v in enumerate(versions_raw)
+        ]
         if versions_raw
-        else [normalize_version({}, text)]
+        else [normalize_version({}, text, fallback_created_at, f"{note_id}-v0")]
     )
     return {
         "id": note_id,
