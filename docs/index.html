@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memo PWA</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="menu-bar">
+        <div class="menu-group">
+          <button class="menu-button" data-menu="file">File</button>
+          <button class="menu-button" data-menu="edit">Edit</button>
+          <button class="menu-button" data-menu="view">View</button>
+        </div>
+        <div class="status-bar">
+          <span id="status-title">Untitled</span>
+          <span id="status-search">0/0</span>
+          <span id="status-save">Saved</span>
+        </div>
+      </div>
+      <nav class="menu-panel" id="menu-file" hidden>
+        <button data-action="new-note">New</button>
+        <button data-action="open-note">Open</button>
+        <button data-action="rename-note">Rename</button>
+        <button data-action="export-selected">Export Selected</button>
+        <button data-action="export-all">Export All</button>
+        <button data-action="import-notes">Import</button>
+        <button data-action="sync">Sync</button>
+        <button data-action="versions">Versions</button>
+        <button data-action="delete-note" class="danger">Delete</button>
+      </nav>
+      <nav class="menu-panel" id="menu-edit" hidden>
+        <button data-action="undo">Undo</button>
+        <button data-action="redo">Redo</button>
+        <button data-action="find">Find</button>
+        <button data-action="next-match">Next Match</button>
+        <button data-action="prev-match">Previous Match</button>
+        <button data-action="replace">Replace</button>
+      </nav>
+      <nav class="menu-panel" id="menu-view" hidden>
+        <button data-action="toggle-wrap">Wrap</button>
+        <button data-action="toggle-log">Log</button>
+        <button data-action="toggle-theme">Light/Dark</button>
+      </nav>
+    </header>
+
+    <main class="editor-area">
+      <div class="highlight-layer" id="highlight-layer"></div>
+      <textarea id="editor" spellcheck="false"></textarea>
+    </main>
+
+    <footer class="log-panel" id="log-panel">
+      <div class="log-header">
+        <span>Log</span>
+        <button id="clear-log">Clear</button>
+      </div>
+      <div class="log-body" id="log-body"></div>
+    </footer>
+
+    <dialog class="modal" id="open-dialog">
+      <form method="dialog">
+        <h2>Open Memo</h2>
+        <div class="modal-body" id="open-list"></div>
+        <menu class="modal-actions">
+          <button value="cancel">Close</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="rename-dialog">
+      <form method="dialog" id="rename-form">
+        <h2>Rename Memo</h2>
+        <label>
+          Title
+          <input type="text" id="rename-input" required />
+        </label>
+        <menu class="modal-actions">
+          <button value="cancel">Cancel</button>
+          <button value="confirm">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="find-dialog">
+      <form method="dialog" id="find-form">
+        <h2>Find</h2>
+        <label>
+          Query
+          <input type="text" id="find-input" />
+        </label>
+        <div class="modal-row">
+          <label><input type="checkbox" id="find-regex" /> Regex</label>
+          <label><input type="checkbox" id="find-case" /> Case sensitive</label>
+        </div>
+        <menu class="modal-actions">
+          <button value="cancel">Close</button>
+          <button value="confirm">Find</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="replace-dialog">
+      <form method="dialog" id="replace-form">
+        <h2>Replace</h2>
+        <label>
+          Find
+          <input type="text" id="replace-find" />
+        </label>
+        <label>
+          Replace with
+          <input type="text" id="replace-with" />
+        </label>
+        <div class="modal-row">
+          <label><input type="checkbox" id="replace-regex" /> Regex</label>
+          <label><input type="checkbox" id="replace-case" /> Case sensitive</label>
+        </div>
+        <menu class="modal-actions">
+          <button value="cancel">Close</button>
+          <button value="replace">Replace</button>
+          <button value="replace-all">Replace All</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="sync-dialog">
+      <form method="dialog" id="sync-form">
+        <h2>Sync</h2>
+        <label>
+          Server URL
+          <input type="url" id="sync-url" placeholder="https://example.com" />
+        </label>
+        <label>
+          Token
+          <input type="text" id="sync-token" placeholder="auth token" />
+        </label>
+        <div class="modal-row">
+          <button type="button" data-sync="register">Register</button>
+          <button type="button" data-sync="login">Login</button>
+        </div>
+        <menu class="modal-actions">
+          <button value="cancel">Close</button>
+          <button value="push">Overwrite Server</button>
+          <button value="pull">Replace Local</button>
+          <button value="sync">Sync</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="versions-dialog">
+      <form method="dialog" id="versions-form">
+        <h2>Versions</h2>
+        <div class="modal-body" id="versions-list"></div>
+        <menu class="modal-actions">
+          <button value="cancel">Close</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="import-dialog">
+      <form method="dialog" id="import-form">
+        <h2>Import</h2>
+        <label>
+          JSON
+          <textarea id="import-input" rows="8" placeholder='{"notes": []}'></textarea>
+        </label>
+        <menu class="modal-actions">
+          <button value="cancel">Cancel</button>
+          <button value="confirm">Import</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
