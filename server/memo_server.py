@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -15,6 +16,8 @@ from aiohttp import web
 SCHEMA_VERSION = 2
 PBKDF2_ITERATIONS = 150_000
 TOKEN_BYTES = 32
+
+logger = logging.getLogger("memo_server")
 
 
 def now_iso():
@@ -285,6 +288,50 @@ async def cors_middleware(request, handler):
 
 
 @web.middleware
+async def logging_middleware(request, handler):
+    start_time = time.monotonic()
+    response = None
+    try:
+        response = await handler(request)
+        return response
+    except web.HTTPException as exc:
+        response = exc
+        raise
+    except Exception:
+        logger.exception(
+            "Unhandled error during request %s",
+            json.dumps({"method": request.method, "path": request.path}, ensure_ascii=False),
+        )
+        raise
+    finally:
+        duration_ms = (time.monotonic() - start_time) * 1000
+        user = request.get("user")
+        user_id = user.get("id") if isinstance(user, dict) else None
+        headers = {
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() != "authorization"
+        }
+        status = response.status if response is not None else "error"
+        logger.info(
+            "request %s",
+            json.dumps(
+                {
+                    "method": request.method,
+                    "path": request.path,
+                    "status": status,
+                    "duration_ms": round(duration_ms, 2),
+                    "remote": request.remote,
+                    "query": dict(request.query),
+                    "headers": headers,
+                    "user_id": user_id,
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+
+@web.middleware
 async def https_middleware(request, handler):
     if request.app.get("require_https") and get_request_scheme(request) != "https":
         return web.json_response({"error": "https_required"}, status=403)
@@ -305,7 +352,9 @@ async def auth_middleware(request, handler):
 
 async def create_app(pool, require_https=False, trust_proxy=False, allow_register=True):
     await ensure_schema(pool)
-    app = web.Application(middlewares=[cors_middleware, https_middleware, auth_middleware])
+    app = web.Application(
+        middlewares=[logging_middleware, cors_middleware, https_middleware, auth_middleware]
+    )
     app["db"] = pool
     app["require_https"] = require_https
     app["trust_proxy"] = trust_proxy
@@ -313,6 +362,9 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
 
     async def get_notes(request):
         user = request["user"]
+        logger.debug(
+            "Fetching notes %s", json.dumps({"user_id": user.get("id")}, ensure_ascii=False)
+        )
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -336,6 +388,10 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
                 }
             )
             notes.append(note)
+        logger.debug(
+            "Fetched notes %s",
+            json.dumps({"user_id": user.get("id"), "count": len(notes)}, ensure_ascii=False),
+        )
         return web.json_response({"schema": SCHEMA_VERSION, "notes": notes})
 
     async def post_notes(request):
@@ -348,6 +404,10 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
         if not isinstance(notes, list):
             return web.json_response({"error": "notes_required"}, status=400)
         incoming = [normalize_note(note) for note in notes]
+        logger.debug(
+            "Posting notes %s",
+            json.dumps({"user_id": user.get("id"), "count": len(incoming)}, ensure_ascii=False),
+        )
         async with pool.acquire() as conn:
             async with conn.transaction():
                 for note in incoming:
@@ -391,6 +451,10 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
         if not isinstance(notes, list):
             return web.json_response({"error": "notes_required"}, status=400)
         incoming = [normalize_note(note) for note in notes]
+        logger.debug(
+            "Replacing notes %s",
+            json.dumps({"user_id": user.get("id"), "count": len(incoming)}, ensure_ascii=False),
+        )
         async with pool.acquire() as conn:
             async with conn.transaction():
                 incoming_ids = [note["id"] for note in incoming]
@@ -463,6 +527,13 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
         token = issue_token(user)
         await insert_user(pool, user)
         await insert_token(pool, user["id"], token)
+        logger.info(
+            "Registered user %s",
+            json.dumps(
+                {"user_id": user.get("id"), "username": user.get("username")},
+                ensure_ascii=False,
+            ),
+        )
         return web.json_response(
             {
                 "status": "ok",
@@ -485,6 +556,13 @@ async def create_app(pool, require_https=False, trust_proxy=False, allow_registe
             return web.json_response({"error": "invalid_credentials"}, status=401)
         token = issue_token(user)
         await insert_token(pool, user["id"], token)
+        logger.info(
+            "User login %s",
+            json.dumps(
+                {"user_id": user.get("id"), "username": user.get("username")},
+                ensure_ascii=False,
+            ),
+        )
         return web.json_response(
             {
                 "status": "ok",
@@ -531,8 +609,29 @@ def main():
     parser.add_argument("--require-https", action="store_true")
     parser.add_argument("--trust-proxy", action="store_true")
     parser.add_argument("--disable-register", action="store_true")
+    parser.add_argument("--log-level", default=os.environ.get("LOG_LEVEL", "INFO"))
     args = parser.parse_args()
     allow_register = not args.disable_register
+
+    logging.basicConfig(
+        level=args.log_level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    logger.info(
+        "Starting server %s",
+        json.dumps(
+            {
+                "host": args.host,
+                "port": args.port,
+                "require_https": args.require_https,
+                "trust_proxy": args.trust_proxy,
+                "allow_register": allow_register,
+                "database_url": args.database_url,
+            },
+            ensure_ascii=False,
+        ),
+    )
+
     async def init_app():
         pool = await asyncpg.create_pool(dsn=args.database_url)
         app = await create_app(

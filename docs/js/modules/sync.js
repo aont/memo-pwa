@@ -49,6 +49,7 @@ export function createSyncController({
   loadCurrentNoteToEditor,
   setSavedState,
   schedulePersist,
+  debug,
   log,
   warn,
   err
@@ -83,10 +84,18 @@ export function createSyncController({
     if (!base) {
       throw new Error("Auth endpoint is not set.");
     }
+    debug?.("Auth request start", { endpoint: base, path, username: payload?.username });
+    const start = performance.now();
     const res = await fetch(`${base}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
+    });
+    debug?.("Auth request response", {
+      endpoint: base,
+      path,
+      status: res.status,
+      durationMs: Math.round(performance.now() - start)
     });
     if (!res.ok) {
       let details = `${res.status}`;
@@ -102,18 +111,22 @@ export function createSyncController({
   }
 
   async function registerUser({ endpoint, username, password }) {
+    debug?.("Register attempt", { endpoint, username });
     const payload = await postAuth(endpoint, "/auth/register", { username, password });
     if (!payload?.token) {
       throw new Error("Register failed: token missing.");
     }
+    debug?.("Register succeeded", { username });
     return payload.token;
   }
 
   async function loginUser({ endpoint, username, password }) {
+    debug?.("Login attempt", { endpoint, username });
     const payload = await postAuth(endpoint, "/auth/login", { username, password });
     if (!payload?.token) {
       throw new Error("Login failed: token missing.");
     }
+    debug?.("Login succeeded", { username });
     return payload.token;
   }
 
@@ -122,6 +135,8 @@ export function createSyncController({
     if (!base) {
       throw new Error("Sync endpoint is not set.");
     }
+    debug?.("Fetch server notes start", { endpoint: base });
+    const start = performance.now();
     const res = await fetch(`${base}/notes`, {
       method: "GET",
       headers: buildAuthHeaders(token)
@@ -131,6 +146,12 @@ export function createSyncController({
     }
     const payload = await res.json();
     const notes = Array.isArray(payload?.notes) ? payload.notes : [];
+    debug?.("Fetch server notes completed", {
+      endpoint: base,
+      status: res.status,
+      durationMs: Math.round(performance.now() - start),
+      count: notes.length
+    });
     return notes.map((note) => normalizeNote(note));
   }
 
@@ -139,6 +160,8 @@ export function createSyncController({
     if (!base) {
       throw new Error("Sync endpoint is not set.");
     }
+    debug?.("Push notes start", { endpoint: base, count: notes.length });
+    const start = performance.now();
     const res = await fetch(`${base}/notes`, {
       method: "POST",
       headers: {
@@ -150,7 +173,14 @@ export function createSyncController({
     if (!res.ok) {
       throw new Error(`Server responded ${res.status}`);
     }
-    return res.json();
+    const payload = await res.json();
+    debug?.("Push notes completed", {
+      endpoint: base,
+      status: res.status,
+      durationMs: Math.round(performance.now() - start),
+      received: payload?.received
+    });
+    return payload;
   }
 
   async function replaceNotes(endpoint, notes, token) {
@@ -158,6 +188,8 @@ export function createSyncController({
     if (!base) {
       throw new Error("Sync endpoint is not set.");
     }
+    debug?.("Replace notes start", { endpoint: base, count: notes.length });
+    const start = performance.now();
     const res = await fetch(`${base}/notes`, {
       method: "PUT",
       headers: {
@@ -169,7 +201,14 @@ export function createSyncController({
     if (!res.ok) {
       throw new Error(`Server responded ${res.status}`);
     }
-    return res.json();
+    const payload = await res.json();
+    debug?.("Replace notes completed", {
+      endpoint: base,
+      status: res.status,
+      durationMs: Math.round(performance.now() - start),
+      received: payload?.received
+    });
+    return payload;
   }
 
   function applyServerNote(localNote, serverNote) {
@@ -197,6 +236,7 @@ export function createSyncController({
     }
     setSavedState("Syncing…");
     log("Sync started", { endpoint: base });
+    debug?.("Sync preflight", { localNotes: state.db.notes.length, currentId: state.currentId });
 
     for (const note of state.db.notes) {
       ensureNoteVersioning(note);
@@ -277,6 +317,7 @@ export function createSyncController({
     }
     setSavedState("Syncing…");
     log("Replace local with server started", { endpoint: base });
+    debug?.("Replace local preflight", { localNotes: state.db.notes.length, currentId: state.currentId });
 
     const serverNotes = await fetchServerNotes(base, token);
     state.db.notes = serverNotes.map((note) => cloneNote(note));
@@ -304,6 +345,7 @@ export function createSyncController({
     }
     setSavedState("Syncing…");
     log("Replace server with local started", { endpoint: base });
+    debug?.("Replace server preflight", { localNotes: state.db.notes.length, currentId: state.currentId });
 
     for (const note of state.db.notes) {
       ensureNoteVersioning(note);

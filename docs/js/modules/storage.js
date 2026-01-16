@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   caseSensitive: "memo:case:v1",
   regex: "memo:regex:v1",
   logUi: "memo:logui:v1",
+  logLevel: "memo:loglevel:v1",
   serverEndpoint: "memo:server:endpoint:v1",
   serverToken: "memo:server:token:v1"
 };
@@ -43,6 +44,7 @@ export function loadNotes(logger) {
       if (parsed && Array.isArray(parsed.notes)) {
         db = { version: 3, notes: parsed.notes.map((note) => normalizeNote(note)) };
         logger?.log?.("DB loaded", { notes: db.notes.length });
+        logger?.debug?.("DB load detail", { version: parsed.version ?? "unknown" });
       }
     } catch (e) {
       logger?.warn?.("DB parse failed", { message: e?.message });
@@ -66,6 +68,7 @@ export function loadNotes(logger) {
   }
 
   currentId = localStorage.getItem(STORAGE_KEYS.current) || currentId;
+  logger?.debug?.("DB current note", { currentId });
   return { db, currentId };
 }
 

@@ -96,16 +96,18 @@ import { createSyncController } from "./modules/sync.js";
   // =========================
   // Logger
   // =========================
-  const { log, warn, err } = createLogger(logEl);
+  const { debug, log, warn, err, getLevel } = createLogger(logEl);
+  debug("Logger initialized", { level: getLevel() });
 
   // =========================
   // DB
   // =========================
-  const loadResult = loadNotes({ log, warn });
+  const loadResult = loadNotes({ debug, log, warn });
   const state = {
     db: loadResult.db,
     currentId: loadResult.currentId
   };
+  debug("State initialized", { notes: state.db.notes.length, currentId: state.currentId });
 
   // =========================
   // Search/Highlight
@@ -123,6 +125,7 @@ import { createSyncController } from "./modules/sync.js";
   // Undo/Redo
   // =========================
   const history = createHistoryStore();
+  debug("History store ready");
 
   function applySnapshot(snap) {
     editor.value = snap.text;
@@ -166,6 +169,7 @@ import { createSyncController } from "./modules/sync.js";
   function setLogVisible(v) {
     savePreference(STORAGE_KEYS.logUi, v ? "1" : "0");
     document.querySelector(".bottombar").style.display = v ? "block" : "none";
+    debug("Log UI visibility changed", { visible: v });
   }
 
   // =========================
@@ -257,6 +261,7 @@ import { createSyncController } from "./modules/sync.js";
     loadCurrentNoteToEditor,
     setSavedState,
     schedulePersist,
+    debug,
     log,
     warn,
     err
@@ -726,6 +731,7 @@ import { createSyncController } from "./modules/sync.js";
   loadCurrentNoteToEditor();
 
   const prefs = loadPreferences();
+  debug("Preferences loaded", prefs);
   setWrap(prefs.wrap);
   regexToggle.checked = prefs.regex;
   caseToggle.checked = prefs.caseSensitive;
@@ -739,9 +745,15 @@ import { createSyncController } from "./modules/sync.js";
 
   // Global error logs
   window.addEventListener("error", (e) => {
-    err("window error", { message: e.message, source: e.filename, line: e.lineno, col: e.colno });
+    err("window error", {
+      message: e.message,
+      source: e.filename,
+      line: e.lineno,
+      col: e.colno,
+      stack: e.error?.stack
+    });
   });
   window.addEventListener("unhandledrejection", (e) => {
-    err("unhandledrejection", { reason: String(e.reason) });
+    err("unhandledrejection", { reason: String(e.reason), stack: e.reason?.stack });
   });
 })();
