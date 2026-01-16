@@ -25,7 +25,7 @@ The app will be available at `http://localhost:8080`.
 
 ## Project structure
 
-- `static/` contains the client assets (`index.html`, `styles.css`, `app.js`).
+- `docs/` contains the client assets (`index.html`, `styles.css`, `app.js`).
 - `server.py` is the aiohttp server for sync operations.
 - `server_data.json` is created automatically to store synced memo data.
 

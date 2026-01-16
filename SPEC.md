@@ -59,7 +59,7 @@ Provide a simple memo-taking progressive web app that works offline, tracks memo
 ## Non-functional requirements
 
 - **Offline-first**: The app must function without network access using local storage.
-- **Simple deployment**: Server runs with `python server.py` and serves static assets.
+- **Simple deployment**: Server runs with `python server.py` and serves static assets from `docs/`.
 - **Minimal dependencies**: The server uses aiohttp only.
 
 ## Future considerations

@@ -1,12 +1,19 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Dict, List
 
 from aiohttp import web
 
 DATA_FILE = Path(__file__).parent / "server_data.json"
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = Path(__file__).parent / "docs"
+CORS_ORIGIN = os.environ.get("MEMO_CORS_ORIGIN", "*")
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": CORS_ORIGIN,
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+}
 
 
 def load_data() -> Dict[str, Dict[str, dict]]:
@@ -77,8 +84,19 @@ async def handle_health(_: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
 
 
+@web.middleware
+async def cors_middleware(request: web.Request, handler):
+    if request.path.startswith("/api/"):
+        if request.method == "OPTIONS":
+            return web.Response(status=204, headers=CORS_HEADERS)
+        response = await handler(request)
+        response.headers.update(CORS_HEADERS)
+        return response
+    return await handler(request)
+
+
 def create_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[cors_middleware])
     app["store"] = MemoStore()
     app.router.add_post("/api/sync", handle_sync)
     app.router.add_get("/api/health", handle_health)

@@ -6,8 +6,18 @@ const newMemoButton = document.getElementById("new-memo");
 const saveVersionButton = document.getElementById("save-version");
 const syncButton = document.getElementById("sync");
 const syncStatus = document.getElementById("sync-status");
+const apiBaseInput = document.getElementById("api-base");
+const apiBaseSaveButton = document.getElementById("save-api-base");
 
 const storageKey = "memo-data";
+const apiBaseStorageKey = "memo-api-base";
+const initialApiBase =
+  localStorage.getItem(apiBaseStorageKey) ||
+  document.querySelector('meta[name="memo-api-base"]')?.content ||
+  window.MEMO_API_BASE ||
+  "";
+let apiBase = initialApiBase;
+const apiUrl = (path) => `${apiBase.replace(/\/$/, "")}${path}`;
 
 const state = {
   memos: [],
@@ -179,7 +189,7 @@ const handleSyncResults = (results) => {
 const sync = async () => {
   syncStatus.textContent = "Syncing...";
   try {
-    const response = await fetch("/api/sync", {
+    const response = await fetch(apiUrl("/api/sync"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ memos: state.memos }),
@@ -198,12 +208,24 @@ const sync = async () => {
   }
 };
 
+const applyApiBase = () => {
+  apiBase = apiBaseInput.value.trim();
+  if (apiBase) {
+    localStorage.setItem(apiBaseStorageKey, apiBase);
+  } else {
+    localStorage.removeItem(apiBaseStorageKey);
+  }
+  syncStatus.textContent = "API base updated";
+};
+
 newMemoButton.addEventListener("click", createMemo);
 saveVersionButton.addEventListener("click", saveVersion);
 syncButton.addEventListener("click", sync);
 memoTitle.addEventListener("input", (event) => updateMemoTitle(event.target.value));
+apiBaseSaveButton.addEventListener("click", applyApiBase);
 
 loadState();
+apiBaseInput.value = apiBase;
 if (!state.memos.length) {
   createMemo();
 } else {
