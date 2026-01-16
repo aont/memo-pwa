@@ -7,15 +7,23 @@
  
   <style> 
     :root{ 
-      --bg:#0b1220; 
-      --panel:#111827; 
-      --panel2:#0f172a; 
-      --text:#e5e7eb; 
-      --muted:#94a3b8; 
-      --line:#1f2937; 
-      --accent:#60a5fa; 
-      --warn:#f59e0b; 
-      --hit:#fde047; 
+      --bg:#ffffff; 
+      --panel:#f8fafc; 
+      --panel2:#f1f5f9; 
+      --text:#0f172a; 
+      --muted:#64748b; 
+      --line:#e2e8f0; 
+      --accent:#2563eb; 
+      --warn:#d97706; 
+      --hit:#fde68a; 
+      --menubar-bg: rgba(255,255,255,0.96); 
+      --menu-panel-bg: rgba(248,250,252,0.98); 
+      --surface:#ffffff; 
+      --surface-alt:#f8fafc; 
+      --input-bg:#ffffff; 
+      --dialog-bg: rgba(248,250,252,0.98); 
+      --overlay-bg: rgba(15,23,42,0.35); 
+      --bottombar-bg: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(241,245,249,0.9) 30%, rgba(255,255,255,1) 100%); 
  
       --safe-b: env(safe-area-inset-bottom, 0px); 
       --safe-t: env(safe-area-inset-top, 0px); 
@@ -26,6 +34,25 @@
       --pad: 12px; 
       --font: 16px; 
       --lh: 1.5; 
+    } 
+    body[data-theme="dark"]{ 
+      --bg:#0b1220; 
+      --panel:#111827; 
+      --panel2:#0f172a; 
+      --text:#e5e7eb; 
+      --muted:#94a3b8; 
+      --line:#1f2937; 
+      --accent:#60a5fa; 
+      --warn:#f59e0b; 
+      --hit:#fde047; 
+      --menubar-bg: rgba(11,18,32,0.96); 
+      --menu-panel-bg: rgba(17,24,39,0.98); 
+      --surface:#0a1020; 
+      --surface-alt:#0a1020; 
+      --input-bg:#0a1020; 
+      --dialog-bg: rgba(17,24,39,0.98); 
+      --overlay-bg: rgba(0,0,0,0.55); 
+      --bottombar-bg: linear-gradient(180deg, rgba(11,18,32,0.2), rgba(11,18,32,0.9) 30%, rgba(11,18,32,1) 100%); 
     } 
  
     *{ box-sizing:border-box; } 
@@ -49,7 +76,7 @@
       display:flex; 
       align-items:center; 
       gap:10px; 
-      background: rgba(11,18,32,0.96); 
+      background: var(--menubar-bg); 
       border-bottom: 1px solid var(--line); 
       z-index: 50; 
     } 
@@ -70,7 +97,7 @@
       top: 44px; 
       left: 0; 
       width: 220px; 
-      background: rgba(17,24,39,0.98); 
+      background: var(--menu-panel-bg); 
       border:1px solid var(--line); 
       border-radius: var(--radius); 
       padding: 6px; 
@@ -130,7 +157,7 @@
       border:1px solid var(--line); 
       border-radius: var(--radius); 
       overflow:hidden; 
-      background:#0a1020; 
+      background:var(--surface); 
     } 
  
     #highlightLayer{ 
@@ -195,12 +222,12 @@
       height: calc(var(--bottom-h) + var(--safe-b)); 
       padding: 8px var(--pad) calc(8px + var(--safe-b)) var(--pad); 
       border-top:1px solid var(--line); 
-      background: linear-gradient(180deg, rgba(11,18,32,0.2), rgba(11,18,32,0.9) 30%, rgba(11,18,32,1) 100%); 
+      background: var(--bottombar-bg); 
       z-index: 40; 
     } 
     .logwrap{ 
       border:1px solid var(--line); 
-      background: #0a1020; 
+      background: var(--surface-alt); 
       border-radius: var(--radius); 
       padding: 8px 10px; 
       height: 100%; 
@@ -221,7 +248,7 @@
     .overlay{ 
       position:fixed; 
       inset:0; 
-      background: rgba(0,0,0,0.55); 
+      background: var(--overlay-bg); 
       display:none; 
       align-items:center; 
       justify-content:center; 
@@ -233,7 +260,7 @@
     .dialog{ 
       width: min(520px, 100%); 
       border: 1px solid var(--line); 
-      background: rgba(17,24,39,0.98); 
+      background: var(--dialog-bg); 
       border-radius: 16px; 
       overflow:hidden; 
       box-shadow: 0 16px 40px rgba(0,0,0,0.45); 
@@ -267,7 +294,7 @@
       height:44px; 
       border-radius: 12px; 
       border:1px solid var(--line); 
-      background: #0a1020; 
+      background: var(--input-bg); 
       color: var(--text); 
       padding: 0 10px; 
       font-size: 14px; 
@@ -279,7 +306,7 @@
       height:44px; 
       border-radius: 12px; 
       border:1px solid var(--line); 
-      background: #0a1020; 
+      background: var(--input-bg); 
       color: var(--text); 
       padding: 0 10px; 
       font-size: 14px; 
@@ -382,6 +409,9 @@
         <button class="menu-item" id="mWrap" role="menuitemcheckbox" aria-checked="true">Wrap</button> 
         <div class="menu-sep"></div> 
         <button class="menu-item" id="mToggleLog" role="menuitem">Toggle Log</button> 
+        <div class="menu-sep"></div> 
+        <button class="menu-item" id="mThemeLight" role="menuitemradio" aria-checked="true">Background: White</button> 
+        <button class="menu-item" id="mThemeDark" role="menuitemradio" aria-checked="false">Background: Black</button> 
       </div> 
     </div> 
  

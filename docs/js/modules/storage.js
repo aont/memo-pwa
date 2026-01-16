@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   notes: "memo:notes:v3",
   current: "memo:current:v2",
   wrap: "memo:wrap:v1",
+  theme: "memo:theme:v1",
   caseSensitive: "memo:case:v1",
   regex: "memo:regex:v1",
   logUi: "memo:logui:v1",
@@ -80,6 +81,7 @@ export function saveNotes(db, currentId) {
 export function loadPreferences() {
   return {
     wrap: localStorage.getItem(STORAGE_KEYS.wrap) !== "0",
+    theme: localStorage.getItem(STORAGE_KEYS.theme) || "light",
     regex: localStorage.getItem(STORAGE_KEYS.regex) === "1",
     caseSensitive: localStorage.getItem(STORAGE_KEYS.caseSensitive) === "1",
     logVisible: localStorage.getItem(STORAGE_KEYS.logUi) === "1"

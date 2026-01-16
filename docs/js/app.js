@@ -42,6 +42,8 @@ import { createSyncController } from "./modules/sync.js";
   const mReplace = document.getElementById("mReplace");
   const mWrap = document.getElementById("mWrap");
   const mToggleLog = document.getElementById("mToggleLog");
+  const mThemeLight = document.getElementById("mThemeLight");
+  const mThemeDark = document.getElementById("mThemeDark");
 
   const mExportSel = document.getElementById("mExportSel");
   const mExportAll = document.getElementById("mExportAll");
@@ -92,6 +94,7 @@ import { createSyncController } from "./modules/sync.js";
 
   const versionSelect = document.getElementById("versionSelect");
   const versionRestoreBtn = document.getElementById("versionRestoreBtn");
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
   // =========================
   // Logger
@@ -170,6 +173,23 @@ import { createSyncController } from "./modules/sync.js";
     savePreference(STORAGE_KEYS.logUi, v ? "1" : "0");
     document.querySelector(".bottombar").style.display = v ? "block" : "none";
     debug("Log UI visibility changed", { visible: v });
+  }
+
+  function setTheme(theme) {
+    const nextTheme = theme === "dark" ? "dark" : "light";
+    if (nextTheme === "dark") {
+      document.body.setAttribute("data-theme", "dark");
+    } else {
+      document.body.removeAttribute("data-theme");
+    }
+    if (mThemeLight && mThemeDark) {
+      mThemeLight.setAttribute("aria-checked", nextTheme === "light" ? "true" : "false");
+      mThemeDark.setAttribute("aria-checked", nextTheme === "dark" ? "true" : "false");
+    }
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute("content", nextTheme === "dark" ? "#0b1220" : "#ffffff");
+    }
+    savePreference(STORAGE_KEYS.theme, nextTheme);
   }
 
   // =========================
@@ -403,6 +423,16 @@ import { createSyncController } from "./modules/sync.js";
     const v = !isLogVisible();
     setLogVisible(v);
     log("Toggle Log", { visible: v });
+  });
+  mThemeLight.addEventListener("click", () => {
+    closeMenus();
+    setTheme("light");
+    log("Theme changed", { theme: "light" });
+  });
+  mThemeDark.addEventListener("click", () => {
+    closeMenus();
+    setTheme("dark");
+    log("Theme changed", { theme: "dark" });
   });
 
   mExportSel.addEventListener("click", () => {
@@ -733,6 +763,7 @@ import { createSyncController } from "./modules/sync.js";
   const prefs = loadPreferences();
   debug("Preferences loaded", prefs);
   setWrap(prefs.wrap);
+  setTheme(prefs.theme);
   regexToggle.checked = prefs.regex;
   caseToggle.checked = prefs.caseSensitive;
   setLogVisible(prefs.logVisible);
