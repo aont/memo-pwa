@@ -9,7 +9,9 @@ const syncStatus = document.getElementById("sync-status");
 const apiBaseInput = document.getElementById("api-base");
 const apiBaseSaveButton = document.getElementById("save-api-base");
 
-const storageKey = "memo-data";
+const dbName = "memo-pwa";
+const dbVersion = 1;
+const memoStore = "memo-state";
 const apiBaseStorageKey = "memo-api-base";
 const initialApiBase =
   localStorage.getItem(apiBaseStorageKey) ||
@@ -24,6 +26,47 @@ const state = {
   activeId: null,
 };
 
+let dbPromise;
+
+const openDb = () =>
+  new Promise((resolve, reject) => {
+    const request = indexedDB.open(dbName, dbVersion);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(memoStore)) {
+        db.createObjectStore(memoStore);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+const getDb = () => {
+  if (!dbPromise) {
+    dbPromise = openDb();
+  }
+  return dbPromise;
+};
+
+const readMemos = async () => {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(memoStore, "readonly").objectStore(memoStore).get("memos");
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const writeMemos = async (memos) => {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(memoStore, "readwrite");
+    tx.objectStore(memoStore).put(memos, "memos");
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
 const formatTitle = (date) => {
   const datePart = date.toLocaleDateString();
   const timePart = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -32,15 +75,20 @@ const formatTitle = (date) => {
 
 const formatTimestamp = (timestamp) => new Date(timestamp).toLocaleString();
 
-const saveState = () => {
-  localStorage.setItem(storageKey, JSON.stringify(state.memos));
+const saveState = async () => {
+  try {
+    await writeMemos(state.memos);
+  } catch (error) {
+    console.error("Failed to save memos", error);
+  }
 };
 
-const loadState = () => {
-  const saved = localStorage.getItem(storageKey);
-  if (saved) {
-    state.memos = JSON.parse(saved);
+const loadState = async () => {
+  try {
+    state.memos = await readMemos();
     state.activeId = state.memos[0]?.id ?? null;
+  } catch (error) {
+    console.error("Failed to load memos", error);
   }
 };
 
@@ -52,7 +100,7 @@ const createVersion = (content) => ({
   timestamp: new Date().toISOString(),
 });
 
-const createMemo = () => {
+const createMemo = async () => {
   const now = new Date();
   const memo = {
     id: crypto.randomUUID(),
@@ -61,19 +109,19 @@ const createMemo = () => {
   };
   state.memos.unshift(memo);
   state.activeId = memo.id;
-  saveState();
+  await saveState();
   render();
 };
 
-const updateMemoTitle = (value) => {
+const updateMemoTitle = async (value) => {
   const memo = currentMemo();
   if (!memo) return;
   memo.title = value;
-  saveState();
+  await saveState();
   renderMemoList();
 };
 
-const saveVersion = () => {
+const saveVersion = async () => {
   const memo = currentMemo();
   if (!memo) return;
   const last = memo.history[memo.history.length - 1];
@@ -81,18 +129,18 @@ const saveVersion = () => {
     return;
   }
   memo.history.push(createVersion(memoContent.value));
-  saveState();
+  await saveState();
   renderHistory(memo);
   renderMemoList();
 };
 
-const restoreVersion = (memo, version) => {
+const restoreVersion = async (memo, version) => {
   const last = memo.history[memo.history.length - 1];
   if (last && last.content === version.content) {
     return;
   }
   memo.history.push(createVersion(version.content));
-  saveState();
+  await saveState();
   render();
 };
 
@@ -126,7 +174,7 @@ const renderHistory = (memo) => {
       label.textContent = formatTimestamp(version.timestamp);
       const button = document.createElement("button");
       button.textContent = "Restore";
-      button.addEventListener("click", () => restoreVersion(memo, version));
+      button.addEventListener("click", () => void restoreVersion(memo, version));
       li.appendChild(label);
       li.appendChild(button);
       historyList.appendChild(li);
@@ -200,7 +248,7 @@ const sync = async () => {
     const data = await response.json();
     handleSyncResults(data.results);
     mergeServerMemos(data.serverMemos);
-    saveState();
+    await saveState();
     render();
     syncStatus.textContent = "Synced";
   } catch (error) {
@@ -218,16 +266,20 @@ const applyApiBase = () => {
   syncStatus.textContent = "API base updated";
 };
 
-newMemoButton.addEventListener("click", createMemo);
-saveVersionButton.addEventListener("click", saveVersion);
-syncButton.addEventListener("click", sync);
-memoTitle.addEventListener("input", (event) => updateMemoTitle(event.target.value));
+newMemoButton.addEventListener("click", () => void createMemo());
+saveVersionButton.addEventListener("click", () => void saveVersion());
+syncButton.addEventListener("click", () => void sync());
+memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target.value));
 apiBaseSaveButton.addEventListener("click", applyApiBase);
 
-loadState();
-apiBaseInput.value = apiBase;
-if (!state.memos.length) {
-  createMemo();
-} else {
-  render();
-}
+const init = async () => {
+  await loadState();
+  apiBaseInput.value = apiBase;
+  if (!state.memos.length) {
+    await createMemo();
+  } else {
+    render();
+  }
+};
+
+void init();

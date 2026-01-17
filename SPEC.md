@@ -18,8 +18,8 @@ Provide a simple memo-taking progressive web app that works offline, tracks memo
   - Version entries include an ID and timestamp.
   - Users can restore a previous version, creating a new version entry.
 - **Local persistence**
-  - Memos are stored in `localStorage` under a single key.
-  - On load, the app restores the last saved state.
+  - Memos are stored in IndexedDB under a single database.
+  - On load, the app restores the last saved state from IndexedDB.
 - **Sync**
   - Manual sync initiates a `POST /api/sync` request.
   - The client merges server updates and resolves conflicts by creating a copy when needed.
@@ -58,7 +58,7 @@ Provide a simple memo-taking progressive web app that works offline, tracks memo
 
 ## Non-functional requirements
 
-- **Offline-first**: The app must function without network access using local storage.
+- **Offline-first**: The app must function without network access using IndexedDB storage.
 - **Simple deployment**: Server runs with `python server.py` and serves static assets from `docs/`.
 - **Minimal dependencies**: The server uses aiohttp only.
 
