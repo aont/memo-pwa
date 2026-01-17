@@ -59,6 +59,8 @@ Provide a simple memo-taking progressive web app that works offline, tracks memo
 ## Non-functional requirements
 
 - **Offline-first**: The app must function without network access using IndexedDB storage.
+- **PWA assets**: The client ships a web app manifest, service worker, and icons to enable installation and offline access to the app shell.
+- **Offline sync response**: When offline, sync requests should return a clear error response to the client.
 - **Simple deployment**: Server runs with `python server.py` and serves static assets from `docs/`.
 - **Minimal dependencies**: The server uses aiohttp only.
 

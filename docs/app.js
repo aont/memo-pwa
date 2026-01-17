@@ -266,6 +266,17 @@ const applyApiBase = () => {
   syncStatus.textContent = "API base updated";
 };
 
+const registerServiceWorker = async () => {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  try {
+    await navigator.serviceWorker.register("sw.js");
+  } catch (error) {
+    console.warn("Service worker registration failed", error);
+  }
+};
+
 newMemoButton.addEventListener("click", () => void createMemo());
 saveVersionButton.addEventListener("click", () => void saveVersion());
 syncButton.addEventListener("click", () => void sync());
@@ -273,6 +284,7 @@ memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target
 apiBaseSaveButton.addEventListener("click", applyApiBase);
 
 const init = async () => {
+  await registerServiceWorker();
   await loadState();
   apiBaseInput.value = apiBase;
   if (!state.memos.length) {
