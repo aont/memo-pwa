@@ -2,7 +2,7 @@
   "name": "Memo PWA",
   "short_name": "Memo",
   "description": "Offline-first memo workspace with local history and optional sync.",
-  "start_url": "./",
+  "start_url": "./index.html",
   "scope": "./",
   "id": "/",
   "display": "standalone",
