@@ -169,6 +169,10 @@ def create_app(serve_frontend: bool) -> web.Application:
     app.router.add_post("/api/sync", handle_sync)
     app.router.add_get("/api/health", handle_health)
     if serve_frontend:
+        async def handle_index(_: web.Request) -> web.Response:
+            return web.FileResponse(STATIC_DIR / "index.html")
+
+        app.router.add_get("/", handle_index)
         app.router.add_static("/", STATIC_DIR, show_index=True)
     return app
 
