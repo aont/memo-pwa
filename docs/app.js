@@ -352,7 +352,7 @@ const registerServiceWorker = async () => {
 };
 
 const resetStorage = async () => {
-  const confirmed = window.confirm("端末内のデータを初期化しますか？");
+  const confirmed = window.confirm("Reset data stored on this device?");
   if (!confirmed) return;
   try {
     if (dbPromise) {
@@ -373,7 +373,7 @@ const resetStorage = async () => {
   state.deletedMemos = [];
   state.activeId = null;
   await createMemo();
-  syncStatus.textContent = "データを初期化しました";
+  syncStatus.textContent = "Data reset complete";
 };
 
 newMemoButton.addEventListener("click", () => void createMemo());
