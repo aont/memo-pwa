@@ -2,12 +2,13 @@ import argparse
 import asyncio
 import json
 import os
+import sqlite3
 from pathlib import Path
 from typing import Dict, List
 
 from aiohttp import web
 
-DATA_FILE = Path(__file__).parent / "server_data.json"
+DATA_FILE = Path(__file__).parent / "server_data.sqlite3"
 STATIC_DIR = Path(__file__).parent / "docs"
 CORS_ORIGIN = os.environ.get("MEMO_CORS_ORIGIN", "*")
 CORS_HEADERS = {
@@ -17,14 +18,36 @@ CORS_HEADERS = {
 }
 
 
-def load_data() -> Dict[str, Dict[str, dict]]:
-    if not DATA_FILE.exists():
-        return {"memos": {}}
-    return json.loads(DATA_FILE.read_text())
+def init_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DATA_FILE)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS memos (
+            id TEXT PRIMARY KEY,
+            memo_json TEXT NOT NULL
+        )
+        """
+    )
+    return conn
 
 
-def save_data(data: Dict[str, Dict[str, dict]]) -> None:
-    DATA_FILE.write_text(json.dumps(data, indent=2))
+def load_data(conn: sqlite3.Connection) -> Dict[str, Dict[str, dict]]:
+    memos = {}
+    for memo_id, memo_json in conn.execute("SELECT id, memo_json FROM memos"):
+        memos[memo_id] = json.loads(memo_json)
+    return {"memos": memos}
+
+
+def save_data(conn: sqlite3.Connection, data: Dict[str, Dict[str, dict]]) -> None:
+    memos = data["memos"]
+    with conn:
+        conn.execute("DELETE FROM memos")
+        conn.executemany(
+            "INSERT INTO memos (id, memo_json) VALUES (?, ?)",
+            [(memo_id, json.dumps(memo)) for memo_id, memo in memos.items()],
+        )
 
 
 def history_ids(history: List[dict]) -> List[str]:
@@ -38,7 +61,8 @@ def is_prefix(shorter: List[str], longer: List[str]) -> bool:
 class MemoStore:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
-        self._data = load_data()
+        self._conn = init_db()
+        self._data = load_data(self._conn)
 
     async def sync(self, client_memos: List[dict]) -> dict:
         async with self._lock:
@@ -68,7 +92,7 @@ class MemoStore:
                     results.append({"id": memo_id, "status": "conflict", "memo": server_memo})
 
             server_memos = [memo for memo_id, memo in memos.items() if memo_id not in seen_ids]
-            save_data(self._data)
+            save_data(self._conn, self._data)
 
         return {"results": results, "serverMemos": server_memos}
 
