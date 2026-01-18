@@ -14,11 +14,12 @@ const dbName = "memo-pwa";
 const dbVersion = 1;
 const memoStore = "memo-state";
 const apiBaseStorageKey = "memo-api-base";
+const defaultApiBase = window.location.origin;
 const initialApiBase =
   localStorage.getItem(apiBaseStorageKey) ||
   document.querySelector('meta[name="memo-api-base"]')?.content ||
   window.MEMO_API_BASE ||
-  "";
+  defaultApiBase;
 let apiBase = initialApiBase;
 const apiUrl = (path) => `${apiBase.replace(/\/$/, "")}${path}`;
 
@@ -314,8 +315,12 @@ const registerServiceWorker = async () => {
 newMemoButton.addEventListener("click", () => void createMemo());
 saveVersionButton.addEventListener("click", () => void saveVersion());
 deleteMemoButton.addEventListener("click", () => void deleteMemo());
-syncButton.addEventListener("click", () => void sync());
+syncButton.addEventListener("click", async () => {
+  await saveVersion();
+  await sync();
+});
 memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target.value));
+memoContent.addEventListener("blur", () => void saveVersion());
 apiBaseSaveButton.addEventListener("click", applyApiBase);
 
 const init = async () => {
