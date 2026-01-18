@@ -75,6 +75,21 @@ const formatTitle = (date) => {
 
 const formatTimestamp = (timestamp) => new Date(timestamp).toLocaleString();
 
+const generateId = () => {
+  if (crypto?.randomUUID) {
+    return crypto.randomUUID();
+  }
+  if (crypto?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `fallback-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
 const saveState = async () => {
   try {
     await writeMemos(state.memos);
@@ -95,7 +110,7 @@ const loadState = async () => {
 const currentMemo = () => state.memos.find((memo) => memo.id === state.activeId);
 
 const createVersion = (content) => ({
-  id: crypto.randomUUID(),
+  id: generateId(),
   content,
   timestamp: new Date().toISOString(),
 });
@@ -103,7 +118,7 @@ const createVersion = (content) => ({
 const createMemo = async () => {
   const now = new Date();
   const memo = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     title: formatTitle(now),
     history: [createVersion("")],
   };
@@ -222,7 +237,7 @@ const handleSyncResults = (results) => {
       if (localMemo) {
         const conflictCopy = {
           ...localMemo,
-          id: crypto.randomUUID(),
+          id: generateId(),
           title: `${localMemo.title} (conflict copy)`
         };
         state.memos.push(conflictCopy);
