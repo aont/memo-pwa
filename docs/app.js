@@ -4,6 +4,7 @@ const memoContent = document.getElementById("memo-content");
 const historyList = document.getElementById("history-list");
 const newMemoButton = document.getElementById("new-memo");
 const saveVersionButton = document.getElementById("save-version");
+const deleteMemoButton = document.getElementById("delete-memo");
 const syncButton = document.getElementById("sync");
 const syncStatus = document.getElementById("sync-status");
 const apiBaseInput = document.getElementById("api-base");
@@ -159,6 +160,23 @@ const restoreVersion = async (memo, version) => {
   render();
 };
 
+const deleteMemo = async () => {
+  const memo = currentMemo();
+  if (!memo) return;
+  const confirmed = window.confirm(`Delete "${memo.title}"?`);
+  if (!confirmed) return;
+  const index = state.memos.findIndex((item) => item.id === memo.id);
+  if (index === -1) return;
+  state.memos.splice(index, 1);
+  if (state.memos.length) {
+    state.activeId = state.memos[Math.max(0, index - 1)].id;
+  } else {
+    state.activeId = null;
+  }
+  await saveState();
+  render();
+};
+
 const renderMemoList = () => {
   memoList.innerHTML = "";
   state.memos.forEach((memo) => {
@@ -198,6 +216,7 @@ const renderHistory = (memo) => {
 
 const renderEditor = () => {
   const memo = currentMemo();
+  deleteMemoButton.disabled = !memo;
   if (!memo) {
     memoTitle.value = "";
     memoContent.value = "";
@@ -294,6 +313,7 @@ const registerServiceWorker = async () => {
 
 newMemoButton.addEventListener("click", () => void createMemo());
 saveVersionButton.addEventListener("click", () => void saveVersion());
+deleteMemoButton.addEventListener("click", () => void deleteMemo());
 syncButton.addEventListener("click", () => void sync());
 memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target.value));
 apiBaseSaveButton.addEventListener("click", applyApiBase);

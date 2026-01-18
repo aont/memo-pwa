@@ -73,6 +73,14 @@ button:hover {
   background: #3b5bdb;
 }
 
+button.danger {
+  background: #ef4444;
+}
+
+button.danger:hover {
+  background: #dc2626;
+}
+
 #sync-status {
   font-size: 0.9rem;
   color: #4b5563;
