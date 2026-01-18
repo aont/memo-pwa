@@ -177,6 +177,11 @@ const saveVersion = async () => {
   renderMemoList();
 };
 
+const adjustMemoContentHeight = () => {
+  memoContent.style.height = "auto";
+  memoContent.style.height = `${memoContent.scrollHeight}px`;
+};
+
 const restoreVersion = async (memo, version) => {
   const last = memo.history[memo.history.length - 1];
   if (last && last.content === version.content) {
@@ -246,6 +251,7 @@ const renderEditor = () => {
   }
   memoTitle.value = memo.title;
   memoContent.value = memo.history[memo.history.length - 1]?.content ?? "";
+  adjustMemoContentHeight();
   renderHistory(memo);
 };
 
@@ -385,6 +391,7 @@ syncButton.addEventListener("click", async () => {
 });
 memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target.value));
 memoContent.addEventListener("blur", () => void saveVersion());
+memoContent.addEventListener("input", adjustMemoContentHeight);
 apiBaseSaveButton.addEventListener("click", applyApiBase);
 resetStorageButton.addEventListener("click", () => void resetStorage());
 
@@ -397,6 +404,7 @@ const init = async () => {
   } else {
     render();
   }
+  adjustMemoContentHeight();
 };
 
 void init();
