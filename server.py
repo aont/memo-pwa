@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
@@ -30,6 +31,14 @@ def init_db() -> sqlite3.Connection:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deleted_memos (
+            id TEXT PRIMARY KEY,
+            deleted_at TEXT NOT NULL
+        )
+        """
+    )
     return conn
 
 
@@ -37,16 +46,25 @@ def load_data(conn: sqlite3.Connection) -> Dict[str, Dict[str, dict]]:
     memos = {}
     for memo_id, memo_json in conn.execute("SELECT id, memo_json FROM memos"):
         memos[memo_id] = json.loads(memo_json)
-    return {"memos": memos}
+    deleted = {}
+    for memo_id, deleted_at in conn.execute("SELECT id, deleted_at FROM deleted_memos"):
+        deleted[memo_id] = deleted_at
+    return {"memos": memos, "deleted": deleted}
 
 
 def save_data(conn: sqlite3.Connection, data: Dict[str, Dict[str, dict]]) -> None:
     memos = data["memos"]
+    deleted = data["deleted"]
     with conn:
         conn.execute("DELETE FROM memos")
         conn.executemany(
             "INSERT INTO memos (id, memo_json) VALUES (?, ?)",
             [(memo_id, json.dumps(memo)) for memo_id, memo in memos.items()],
+        )
+        conn.execute("DELETE FROM deleted_memos")
+        conn.executemany(
+            "INSERT INTO deleted_memos (id, deleted_at) VALUES (?, ?)",
+            [(memo_id, deleted_at) for memo_id, deleted_at in deleted.items()],
         )
 
 
@@ -64,14 +82,29 @@ class MemoStore:
         self._conn = init_db()
         self._data = load_data(self._conn)
 
-    async def sync(self, client_memos: List[dict]) -> dict:
+    async def sync(self, client_memos: List[dict], client_deleted: List[dict]) -> dict:
         async with self._lock:
             memos = self._data["memos"]
+            deleted = self._data["deleted"]
             results = []
             seen_ids = set()
+            for deletion in client_deleted:
+                memo_id = deletion.get("id")
+                if not memo_id:
+                    continue
+                deleted_at = deletion.get("deletedAt") or deletion.get("deleted_at")
+                if not deleted_at:
+                    deleted_at = datetime.now(timezone.utc).isoformat()
+                memos.pop(memo_id, None)
+                deleted[memo_id] = deleted_at
             for memo in client_memos:
                 memo_id = memo["id"]
                 seen_ids.add(memo_id)
+                if memo_id in deleted:
+                    results.append(
+                        {"id": memo_id, "status": "deleted", "deletedAt": deleted[memo_id]}
+                    )
+                    continue
                 server_memo = memos.get(memo_id)
                 if not server_memo:
                     memos[memo_id] = memo
@@ -92,16 +125,26 @@ class MemoStore:
                     results.append({"id": memo_id, "status": "conflict", "memo": server_memo})
 
             server_memos = [memo for memo_id, memo in memos.items() if memo_id not in seen_ids]
+            server_deleted = [
+                {"id": memo_id, "deletedAt": deleted_at}
+                for memo_id, deleted_at in deleted.items()
+                if memo_id not in seen_ids
+            ]
             save_data(self._conn, self._data)
 
-        return {"results": results, "serverMemos": server_memos}
+        return {
+            "results": results,
+            "serverMemos": server_memos,
+            "serverDeleted": server_deleted,
+        }
 
 
 async def handle_sync(request: web.Request) -> web.Response:
     payload = await request.json()
     client_memos = payload.get("memos", [])
+    client_deleted = payload.get("deletedMemos", [])
     store: MemoStore = request.app["store"]
-    response = await store.sync(client_memos)
+    response = await store.sync(client_memos, client_deleted)
     return web.json_response(response)
 
 

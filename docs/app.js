@@ -26,6 +26,7 @@ const apiUrl = (path) => `${apiBase.replace(/\/$/, "")}${path}`;
 const state = {
   memos: [],
   activeId: null,
+  deletedMemos: [],
 };
 
 let dbPromise;
@@ -50,20 +51,22 @@ const getDb = () => {
   return dbPromise;
 };
 
-const readMemos = async () => {
+const readStoreValue = async (key, fallback) => {
   const db = await getDb();
   return new Promise((resolve, reject) => {
-    const request = db.transaction(memoStore, "readonly").objectStore(memoStore).get("memos");
-    request.onsuccess = () => resolve(request.result || []);
+    const request = db.transaction(memoStore, "readonly").objectStore(memoStore).get(key);
+    request.onsuccess = () => resolve(request.result ?? fallback);
     request.onerror = () => reject(request.error);
   });
 };
 
-const writeMemos = async (memos) => {
+const writeState = async () => {
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(memoStore, "readwrite");
-    tx.objectStore(memoStore).put(memos, "memos");
+    const store = tx.objectStore(memoStore);
+    store.put(state.memos, "memos");
+    store.put(state.deletedMemos, "deletedMemos");
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -94,7 +97,7 @@ const generateId = () => {
 
 const saveState = async () => {
   try {
-    await writeMemos(state.memos);
+    await writeState();
   } catch (error) {
     console.error("Failed to save memos", error);
   }
@@ -102,7 +105,8 @@ const saveState = async () => {
 
 const loadState = async () => {
   try {
-    state.memos = await readMemos();
+    state.memos = await readStoreValue("memos", []);
+    state.deletedMemos = await readStoreValue("deletedMemos", []);
     state.activeId = state.memos[0]?.id ?? null;
   } catch (error) {
     console.error("Failed to load memos", error);
@@ -116,6 +120,27 @@ const createVersion = (content) => ({
   content,
   timestamp: new Date().toISOString(),
 });
+
+const recordDeletion = (memoId, deletedAt = new Date().toISOString()) => {
+  if (!memoId) return;
+  if (state.deletedMemos.some((entry) => entry.id === memoId)) {
+    return;
+  }
+  state.deletedMemos.push({ id: memoId, deletedAt });
+};
+
+const removeMemoById = (memoId) => {
+  const index = state.memos.findIndex((item) => item.id === memoId);
+  if (index === -1) return;
+  state.memos.splice(index, 1);
+  if (state.activeId === memoId) {
+    if (state.memos.length) {
+      state.activeId = state.memos[Math.max(0, index - 1)].id;
+    } else {
+      state.activeId = null;
+    }
+  }
+};
 
 const createMemo = async () => {
   const now = new Date();
@@ -166,14 +191,8 @@ const deleteMemo = async () => {
   if (!memo) return;
   const confirmed = window.confirm(`Delete "${memo.title}"?`);
   if (!confirmed) return;
-  const index = state.memos.findIndex((item) => item.id === memo.id);
-  if (index === -1) return;
-  state.memos.splice(index, 1);
-  if (state.memos.length) {
-    state.activeId = state.memos[Math.max(0, index - 1)].id;
-  } else {
-    state.activeId = null;
-  }
+  removeMemoById(memo.id);
+  recordDeletion(memo.id);
   await saveState();
   render();
 };
@@ -235,7 +254,11 @@ const render = () => {
 };
 
 const mergeServerMemos = (serverMemos) => {
+  const deletedIds = new Set(state.deletedMemos.map((entry) => entry.id));
   serverMemos.forEach((memo) => {
+    if (deletedIds.has(memo.id)) {
+      return;
+    }
     if (!state.memos.find((item) => item.id === memo.id)) {
       state.memos.push(memo);
     }
@@ -245,6 +268,11 @@ const mergeServerMemos = (serverMemos) => {
 const handleSyncResults = (results) => {
   results.forEach((result) => {
     const localIndex = state.memos.findIndex((memo) => memo.id === result.id);
+    if (result.status === "deleted") {
+      removeMemoById(result.id);
+      recordDeletion(result.id, result.deletedAt);
+      return;
+    }
     if (result.status === "update") {
       if (localIndex >= 0) {
         state.memos[localIndex] = result.memo;
@@ -258,7 +286,7 @@ const handleSyncResults = (results) => {
         const conflictCopy = {
           ...localMemo,
           id: generateId(),
-          title: `${localMemo.title} (conflict copy)`
+          title: `${localMemo.title} (conflict copy)`,
         };
         state.memos.push(conflictCopy);
         state.memos[localIndex] = result.memo;
@@ -269,19 +297,29 @@ const handleSyncResults = (results) => {
   });
 };
 
+const applyServerDeletions = (serverDeleted) => {
+  if (!Array.isArray(serverDeleted)) return;
+  serverDeleted.forEach((entry) => {
+    if (!entry?.id) return;
+    removeMemoById(entry.id);
+    recordDeletion(entry.id, entry.deletedAt);
+  });
+};
+
 const sync = async () => {
   syncStatus.textContent = "Syncing...";
   try {
     const response = await fetch(apiUrl("/api/sync"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ memos: state.memos }),
+      body: JSON.stringify({ memos: state.memos, deletedMemos: state.deletedMemos }),
     });
     if (!response.ok) {
       throw new Error("Sync failed");
     }
     const data = await response.json();
     handleSyncResults(data.results);
+    applyServerDeletions(data.serverDeleted);
     mergeServerMemos(data.serverMemos);
     await saveState();
     render();
