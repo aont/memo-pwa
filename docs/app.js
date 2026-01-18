@@ -9,6 +9,7 @@ const syncButton = document.getElementById("sync");
 const syncStatus = document.getElementById("sync-status");
 const apiBaseInput = document.getElementById("api-base");
 const apiBaseSaveButton = document.getElementById("save-api-base");
+const resetStorageButton = document.getElementById("reset-storage");
 
 const dbName = "memo-pwa";
 const dbVersion = 1;
@@ -350,6 +351,31 @@ const registerServiceWorker = async () => {
   }
 };
 
+const resetStorage = async () => {
+  const confirmed = window.confirm("端末内のデータを初期化しますか？");
+  if (!confirmed) return;
+  try {
+    if (dbPromise) {
+      const db = await dbPromise;
+      db.close();
+    }
+  } catch (error) {
+    console.warn("Failed to close database before reset", error);
+  }
+  dbPromise = null;
+  await new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(dbName);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => resolve();
+  });
+  state.memos = [];
+  state.deletedMemos = [];
+  state.activeId = null;
+  await createMemo();
+  syncStatus.textContent = "データを初期化しました";
+};
+
 newMemoButton.addEventListener("click", () => void createMemo());
 saveVersionButton.addEventListener("click", () => void saveVersion());
 deleteMemoButton.addEventListener("click", () => void deleteMemo());
@@ -360,6 +386,7 @@ syncButton.addEventListener("click", async () => {
 memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target.value));
 memoContent.addEventListener("blur", () => void saveVersion());
 apiBaseSaveButton.addEventListener("click", applyApiBase);
+resetStorageButton.addEventListener("click", () => void resetStorage());
 
 const init = async () => {
   await registerServiceWorker();
