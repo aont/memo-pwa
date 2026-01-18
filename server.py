@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import os
@@ -95,14 +96,24 @@ async def cors_middleware(request: web.Request, handler):
     return await handler(request)
 
 
-def create_app() -> web.Application:
+def create_app(serve_frontend: bool) -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
     app["store"] = MemoStore()
     app.router.add_post("/api/sync", handle_sync)
     app.router.add_get("/api/health", handle_health)
-    app.router.add_static("/", STATIC_DIR, show_index=True)
+    if serve_frontend:
+        app.router.add_static("/", STATIC_DIR, show_index=True)
     return app
 
 
 if __name__ == "__main__":
-    web.run_app(create_app(), port=8080)
+    parser = argparse.ArgumentParser(description="Memo backend server")
+    parser.add_argument("--bind", default="0.0.0.0", help="Bind address for the server")
+    parser.add_argument("--port", type=int, default=8080, help="Port number for the server")
+    parser.add_argument(
+        "--serve-frontend",
+        action="store_true",
+        help="Also serve the frontend static files",
+    )
+    args = parser.parse_args()
+    web.run_app(create_app(args.serve_frontend), host=args.bind, port=args.port)
