@@ -36,6 +36,26 @@
             <button id="save-version">Save Version</button>
             <button id="delete-memo" class="danger" type="button">Delete Memo</button>
           </div>
+          <div class="search-replace">
+            <div class="search-field">
+              <label for="search-text">Find</label>
+              <input id="search-text" type="text" placeholder="Search text" />
+            </div>
+            <div class="search-field">
+              <label for="replace-text">Replace</label>
+              <input id="replace-text" type="text" placeholder="Replacement" />
+            </div>
+            <label class="search-toggle">
+              <input id="search-case" type="checkbox" />
+              Case sensitive
+            </label>
+            <div class="search-actions">
+              <button id="find-next" type="button">Find Next</button>
+              <button id="replace-one" type="button">Replace</button>
+              <button id="replace-all" type="button">Replace All</button>
+            </div>
+            <span id="search-status" aria-live="polite"></span>
+          </div>
           <textarea id="memo-content" placeholder="Write your memo..."></textarea>
           <div class="history">
             <h3>History</h3>

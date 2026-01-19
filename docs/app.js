@@ -5,6 +5,13 @@ const historyList = document.getElementById("history-list");
 const newMemoButton = document.getElementById("new-memo");
 const saveVersionButton = document.getElementById("save-version");
 const deleteMemoButton = document.getElementById("delete-memo");
+const searchInput = document.getElementById("search-text");
+const replaceInput = document.getElementById("replace-text");
+const searchCaseToggle = document.getElementById("search-case");
+const findNextButton = document.getElementById("find-next");
+const replaceOneButton = document.getElementById("replace-one");
+const replaceAllButton = document.getElementById("replace-all");
+const searchStatus = document.getElementById("search-status");
 const syncButton = document.getElementById("sync");
 const syncStatus = document.getElementById("sync-status");
 const apiBaseInput = document.getElementById("api-base");
@@ -182,6 +189,146 @@ const adjustMemoContentHeight = () => {
   memoContent.style.height = `${memoContent.scrollHeight}px`;
 };
 
+const setSearchControlsDisabled = (disabled) => {
+  [searchInput, replaceInput, searchCaseToggle, findNextButton, replaceOneButton, replaceAllButton].forEach(
+    (element) => {
+      element.disabled = disabled;
+    }
+  );
+  if (disabled) {
+    searchStatus.textContent = "";
+  }
+};
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getMatchIndices = (content, query, caseSensitive) => {
+  if (!query) return [];
+  const haystack = caseSensitive ? content : content.toLowerCase();
+  const needle = caseSensitive ? query : query.toLowerCase();
+  const indices = [];
+  let index = 0;
+  while ((index = haystack.indexOf(needle, index)) !== -1) {
+    indices.push(index);
+    index += needle.length;
+  }
+  return indices;
+};
+
+const updateSearchStatus = () => {
+  const memo = currentMemo();
+  if (!memo) {
+    searchStatus.textContent = "";
+    return;
+  }
+  const query = searchInput.value;
+  if (!query) {
+    searchStatus.textContent = "Enter text to search.";
+    return;
+  }
+  const indices = getMatchIndices(memoContent.value, query, searchCaseToggle.checked);
+  if (!indices.length) {
+    searchStatus.textContent = "No matches found.";
+    return;
+  }
+  searchStatus.textContent = `${indices.length} match${indices.length === 1 ? "" : "es"} found.`;
+};
+
+const focusMatch = (matchIndex, count) => {
+  if (matchIndex === -1) return;
+  const query = searchInput.value;
+  memoContent.focus();
+  memoContent.setSelectionRange(matchIndex, matchIndex + query.length);
+  if (count) {
+    const position = count.indexOf(matchIndex) + 1;
+    if (position > 0) {
+      searchStatus.textContent = `Match ${position} of ${count.length}.`;
+    }
+  }
+};
+
+const findNextMatch = () => {
+  const memo = currentMemo();
+  if (!memo) return;
+  const query = searchInput.value;
+  if (!query) {
+    searchStatus.textContent = "Enter text to search.";
+    return;
+  }
+  const indices = getMatchIndices(memoContent.value, query, searchCaseToggle.checked);
+  if (!indices.length) {
+    searchStatus.textContent = "No matches found.";
+    return;
+  }
+  const cursor = memoContent.selectionEnd ?? 0;
+  const nextIndex = indices.find((index) => index >= cursor);
+  const matchIndex = nextIndex ?? indices[0];
+  focusMatch(matchIndex, indices);
+};
+
+const replaceSelection = (replacement) => {
+  const start = memoContent.selectionStart;
+  const end = memoContent.selectionEnd;
+  if (start == null || end == null || start === end) {
+    return false;
+  }
+  const content = memoContent.value;
+  memoContent.value = `${content.slice(0, start)}${replacement}${content.slice(end)}`;
+  const cursor = start + replacement.length;
+  memoContent.setSelectionRange(cursor, cursor);
+  adjustMemoContentHeight();
+  return true;
+};
+
+const replaceCurrentMatch = () => {
+  const memo = currentMemo();
+  if (!memo) return;
+  const query = searchInput.value;
+  if (!query) {
+    searchStatus.textContent = "Enter text to search.";
+    return;
+  }
+  const replacement = replaceInput.value;
+  const selectedText = memoContent.value.slice(memoContent.selectionStart, memoContent.selectionEnd);
+  const caseSensitive = searchCaseToggle.checked;
+  const matchesSelection = caseSensitive
+    ? selectedText === query
+    : selectedText.toLowerCase() === query.toLowerCase();
+  if (matchesSelection && replaceSelection(replacement)) {
+    updateSearchStatus();
+    return;
+  }
+  findNextMatch();
+  const updatedSelection = memoContent.value.slice(memoContent.selectionStart, memoContent.selectionEnd);
+  const updatedMatches = caseSensitive
+    ? updatedSelection === query
+    : updatedSelection.toLowerCase() === query.toLowerCase();
+  if (updatedMatches) {
+    replaceSelection(replacement);
+  }
+  updateSearchStatus();
+};
+
+const replaceAllMatches = () => {
+  const memo = currentMemo();
+  if (!memo) return;
+  const query = searchInput.value;
+  if (!query) {
+    searchStatus.textContent = "Enter text to search.";
+    return;
+  }
+  const caseSensitive = searchCaseToggle.checked;
+  const indices = getMatchIndices(memoContent.value, query, caseSensitive);
+  if (!indices.length) {
+    searchStatus.textContent = "No matches found.";
+    return;
+  }
+  const regex = new RegExp(escapeRegExp(query), caseSensitive ? "g" : "gi");
+  memoContent.value = memoContent.value.replace(regex, replaceInput.value);
+  adjustMemoContentHeight();
+  searchStatus.textContent = `Replaced ${indices.length} match${indices.length === 1 ? "" : "es"}.`;
+};
+
 const restoreVersion = async (memo, version) => {
   const last = memo.history[memo.history.length - 1];
   if (last && last.content === version.content) {
@@ -247,12 +394,15 @@ const renderEditor = () => {
     memoTitle.value = "";
     memoContent.value = "";
     historyList.innerHTML = "";
+    setSearchControlsDisabled(true);
     return;
   }
   memoTitle.value = memo.title;
   memoContent.value = memo.history[memo.history.length - 1]?.content ?? "";
   adjustMemoContentHeight();
   renderHistory(memo);
+  setSearchControlsDisabled(false);
+  updateSearchStatus();
 };
 
 const render = () => {
@@ -391,7 +541,15 @@ syncButton.addEventListener("click", async () => {
 });
 memoTitle.addEventListener("input", (event) => void updateMemoTitle(event.target.value));
 memoContent.addEventListener("blur", () => void saveVersion());
-memoContent.addEventListener("input", adjustMemoContentHeight);
+memoContent.addEventListener("input", () => {
+  adjustMemoContentHeight();
+  updateSearchStatus();
+});
+searchInput.addEventListener("input", updateSearchStatus);
+searchCaseToggle.addEventListener("change", updateSearchStatus);
+findNextButton.addEventListener("click", findNextMatch);
+replaceOneButton.addEventListener("click", replaceCurrentMatch);
+replaceAllButton.addEventListener("click", replaceAllMatches);
 apiBaseSaveButton.addEventListener("click", applyApiBase);
 resetStorageButton.addEventListener("click", () => void resetStorage());
 

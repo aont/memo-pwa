@@ -151,6 +151,59 @@ aside {
   gap: 1rem;
 }
 
+.search-replace {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.search-field label {
+  font-size: 0.85rem;
+  color: #4b5563;
+  min-width: 60px;
+}
+
+.search-field input {
+  flex: 1;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 0.95rem;
+}
+
+.search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.search-actions button {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+#search-status {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
 #memo-title {
   flex: 1;
   padding: 0.5rem 0.8rem;
