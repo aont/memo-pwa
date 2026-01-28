@@ -27,7 +27,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-const isApiRequest = (request) => new URL(request.url).pathname.startsWith("/api/");
+const isApiRequest = (request) => new URL(request.url).pathname === "/api";
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;

@@ -29,7 +29,7 @@ const initialApiBase =
   window.MEMO_API_BASE ||
   defaultApiBase;
 let apiBase = initialApiBase;
-const apiUrl = (path) => `${apiBase.replace(/\/$/, "")}${path}`;
+const apiEndpoint = () => new URL("/api", apiBase).toString();
 
 const state = {
   memos: [],
@@ -466,10 +466,14 @@ const applyServerDeletions = (serverDeleted) => {
 const sync = async () => {
   syncStatus.textContent = "Syncing...";
   try {
-    const response = await fetch(apiUrl("/api/sync"), {
+    const response = await fetch(apiEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ memos: state.memos, deletedMemos: state.deletedMemos }),
+      body: JSON.stringify({
+        action: "sync",
+        memos: state.memos,
+        deletedMemos: state.deletedMemos,
+      }),
     });
     if (!response.ok) {
       throw new Error("Sync failed");

@@ -38,7 +38,7 @@ The app will be available at `http://localhost:8080`.
 
 ## API
 
-### `POST /api/sync`
+### `POST /api`
 
 Send local memos and receive reconciliation results.
 
@@ -46,6 +46,7 @@ Send local memos and receive reconciliation results.
 
 ```json
 {
+  "action": "sync",
   "memos": [
     {
       "id": "uuid",
@@ -79,6 +80,12 @@ Send local memos and receive reconciliation results.
 
 ## Health check
 
-### `GET /api/health`
+### `POST /api`
 
-Returns `{ "status": "ok" }` to confirm the server is running.
+Send a health check action to confirm the server is running.
+
+```json
+{
+  "action": "health"
+}
+```

@@ -133,8 +133,13 @@ class MemoStore:
         }
 
 
-async def handle_sync(request: web.Request) -> web.Response:
+async def handle_api(request: web.Request) -> web.Response:
     payload = await request.json()
+    action = payload.get("action")
+    if action == "health":
+        return web.json_response({"status": "ok"})
+    if action != "sync":
+        return web.json_response({"error": "unknown_action"}, status=400)
     client_memos = payload.get("memos", [])
     client_deleted = payload.get("deletedMemos", [])
     store: MemoStore = request.app["store"]
@@ -142,13 +147,9 @@ async def handle_sync(request: web.Request) -> web.Response:
     return web.json_response(response)
 
 
-async def handle_health(_: web.Request) -> web.Response:
-    return web.json_response({"status": "ok"})
-
-
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
-    if request.path.startswith("/api/"):
+    if request.path == "/api":
         cors_headers = dict(request.app["cors_headers"])
         requested_headers = request.headers.get("Access-Control-Request-Headers")
         if requested_headers:
@@ -170,8 +171,7 @@ def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.A
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Max-Age": "600",
     }
-    app.router.add_post("/api/sync", handle_sync)
-    app.router.add_get("/api/health", handle_health)
+    app.router.add_post("/api", handle_api)
     if serve_frontend:
         async def handle_index(_: web.Request) -> web.Response:
             return web.FileResponse(STATIC_DIR / "index.html")
