@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import json
-import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,18 +8,13 @@ from typing import Dict, List
 
 from aiohttp import web
 
-DATA_FILE = Path(__file__).parent / "server_data.sqlite3"
+DEFAULT_DATA_FILE = Path(__file__).parent / "server_data.sqlite3"
 STATIC_DIR = Path(__file__).parent / "docs"
-CORS_ORIGIN = os.environ.get("MEMO_CORS_ORIGIN", "*")
-CORS_HEADERS = {
-    "Access-Control-Allow-Origin": CORS_ORIGIN,
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-}
+DEFAULT_CORS_ORIGIN = "*"
 
 
-def init_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DATA_FILE)
+def init_db(data_file: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(data_file)
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute(
@@ -77,9 +71,9 @@ def is_prefix(shorter: List[str], longer: List[str]) -> bool:
 
 
 class MemoStore:
-    def __init__(self) -> None:
+    def __init__(self, data_file: Path) -> None:
         self._lock = asyncio.Lock()
-        self._conn = init_db()
+        self._conn = init_db(data_file)
         self._data = load_data(self._conn)
 
     async def sync(self, client_memos: List[dict], client_deleted: List[dict]) -> dict:
@@ -156,16 +150,21 @@ async def handle_health(_: web.Request) -> web.Response:
 async def cors_middleware(request: web.Request, handler):
     if request.path.startswith("/api/"):
         if request.method == "OPTIONS":
-            return web.Response(status=204, headers=CORS_HEADERS)
+            return web.Response(status=204, headers=request.app["cors_headers"])
         response = await handler(request)
-        response.headers.update(CORS_HEADERS)
+        response.headers.update(request.app["cors_headers"])
         return response
     return await handler(request)
 
 
-def create_app(serve_frontend: bool) -> web.Application:
+def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
-    app["store"] = MemoStore()
+    app["store"] = MemoStore(data_file)
+    app["cors_headers"] = {
+        "Access-Control-Allow-Origin": cors_origin,
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }
     app.router.add_post("/api/sync", handle_sync)
     app.router.add_get("/api/health", handle_health)
     if serve_frontend:
@@ -182,6 +181,17 @@ if __name__ == "__main__":
     parser.add_argument("--bind", default="0.0.0.0", help="Bind address for the server")
     parser.add_argument("--port", type=int, default=8080, help="Port number for the server")
     parser.add_argument(
+        "--data-file",
+        type=Path,
+        default=DEFAULT_DATA_FILE,
+        help="SQLite data file path for memo storage",
+    )
+    parser.add_argument(
+        "--cors-origin",
+        default=DEFAULT_CORS_ORIGIN,
+        help="CORS origin to allow for API requests",
+    )
+    parser.add_argument(
         "--no-serve-frontend",
         action="store_false",
         dest="serve_frontend",
@@ -189,4 +199,8 @@ if __name__ == "__main__":
     )
     parser.set_defaults(serve_frontend=True)
     args = parser.parse_args()
-    web.run_app(create_app(args.serve_frontend), host=args.bind, port=args.port)
+    web.run_app(
+        create_app(args.serve_frontend, args.data_file, args.cors_origin),
+        host=args.bind,
+        port=args.port,
+    )
