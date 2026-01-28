@@ -8,8 +8,8 @@ from typing import Dict, List
 
 from aiohttp import web
 
-DEFAULT_DATA_FILE = Path(__file__).parent / "server_data.sqlite3"
-STATIC_DIR = Path(__file__).parent / "docs"
+DEFAULT_DATA_FILE = Path(__file__).parent.parent / "server_data.sqlite3"
+STATIC_DIR = Path(__file__).parent.parent / "docs"
 DEFAULT_CORS_ORIGIN = "*"
 
 
