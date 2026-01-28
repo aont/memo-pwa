@@ -29,7 +29,16 @@ const initialApiBase =
   window.MEMO_API_BASE ||
   defaultApiBase;
 let apiBase = initialApiBase;
-const apiEndpoint = () => new URL("/api", apiBase).toString();
+const resolveApiEndpoint = (value) => {
+  const trimmed = value?.trim();
+  const baseValue = trimmed ? trimmed : window.location.origin;
+  const url = new URL(baseValue, window.location.origin);
+  if (url.pathname === "/" || url.pathname === "") {
+    url.pathname = "/api";
+  }
+  return url.toString();
+};
+const apiEndpoint = () => resolveApiEndpoint(apiBase);
 
 const state = {
   memos: [],
@@ -498,6 +507,20 @@ const applyApiBase = () => {
     localStorage.removeItem(apiBaseStorageKey);
   }
   syncStatus.textContent = "API base updated";
+  void updateServiceWorkerApiEndpoint();
+};
+
+const updateServiceWorkerApiEndpoint = async () => {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  const endpoint = apiEndpoint();
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    registration.active?.postMessage({ type: "api-endpoint", endpoint });
+  } catch (error) {
+    console.warn("Failed to update service worker API endpoint", error);
+  }
 };
 
 const registerServiceWorker = async () => {
@@ -506,6 +529,7 @@ const registerServiceWorker = async () => {
   }
   try {
     await navigator.serviceWorker.register("sw.js");
+    await updateServiceWorkerApiEndpoint();
   } catch (error) {
     console.warn("Service worker registration failed", error);
   }

@@ -149,17 +149,16 @@ async def handle_api(request: web.Request) -> web.Response:
 
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
-    if request.path == "/api":
-        cors_headers = dict(request.app["cors_headers"])
-        requested_headers = request.headers.get("Access-Control-Request-Headers")
-        if requested_headers:
-            cors_headers["Access-Control-Allow-Headers"] = requested_headers
-        if request.method == "OPTIONS":
-            return web.Response(status=204, headers=cors_headers)
-        response = await handler(request)
+    cors_headers = dict(request.app["cors_headers"])
+    requested_headers = request.headers.get("Access-Control-Request-Headers")
+    if requested_headers:
+        cors_headers["Access-Control-Allow-Headers"] = requested_headers
+    if request.method == "OPTIONS" and request.headers.get("Access-Control-Request-Method"):
+        return web.Response(status=204, headers=cors_headers)
+    response = await handler(request)
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         response.headers.update(cors_headers)
-        return response
-    return await handler(request)
+    return response
 
 
 def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.Application:
@@ -171,7 +170,7 @@ def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.A
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Max-Age": "600",
     }
-    app.router.add_post("/api", handle_api)
+    app.router.add_post("/{api_path:.*}", handle_api)
     if serve_frontend:
         async def handle_index(_: web.Request) -> web.Response:
             return web.FileResponse(STATIC_DIR / "index.html")

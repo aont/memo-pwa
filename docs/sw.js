@@ -9,6 +9,24 @@ const APP_SHELL = [
   "icons/icon-512.svg",
 ];
 
+const apiConfig = {
+  origin: self.location.origin,
+  pathname: "/api",
+};
+
+self.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "api-endpoint") {
+    return;
+  }
+  try {
+    const url = new URL(event.data.endpoint, self.location.origin);
+    apiConfig.origin = url.origin;
+    apiConfig.pathname = url.pathname;
+  } catch (error) {
+    console.warn("Invalid API endpoint message", error);
+  }
+});
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -27,7 +45,10 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-const isApiRequest = (request) => new URL(request.url).pathname === "/api";
+const isApiRequest = (request) => {
+  const url = new URL(request.url);
+  return url.origin === apiConfig.origin && url.pathname === apiConfig.pathname;
+};
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
