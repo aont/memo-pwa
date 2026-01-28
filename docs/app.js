@@ -33,9 +33,6 @@ const resolveApiEndpoint = (value) => {
   const trimmed = value?.trim();
   const baseValue = trimmed ? trimmed : window.location.origin;
   const url = new URL(baseValue, window.location.origin);
-  if (url.pathname === "/" || url.pathname === "") {
-    url.pathname = "/api";
-  }
   return url.toString();
 };
 const apiEndpoint = () => resolveApiEndpoint(apiBase);

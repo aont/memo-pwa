@@ -170,7 +170,7 @@ def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.A
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Max-Age": "600",
     }
-    app.router.add_post("/{api_path:.*}", handle_api)
+    app.router.add_post("/api", handle_api)
     if serve_frontend:
         async def handle_index(_: web.Request) -> web.Response:
             return web.FileResponse(STATIC_DIR / "index.html")
