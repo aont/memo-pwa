@@ -182,9 +182,11 @@ if __name__ == "__main__":
     parser.add_argument("--bind", default="0.0.0.0", help="Bind address for the server")
     parser.add_argument("--port", type=int, default=8080, help="Port number for the server")
     parser.add_argument(
-        "--serve-frontend",
-        action="store_true",
-        help="Also serve the frontend static files",
+        "--no-serve-frontend",
+        action="store_false",
+        dest="serve_frontend",
+        help="Disable serving the frontend static files",
     )
+    parser.set_defaults(serve_frontend=True)
     args = parser.parse_args()
     web.run_app(create_app(args.serve_frontend), host=args.bind, port=args.port)
