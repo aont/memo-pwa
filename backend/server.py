@@ -149,10 +149,14 @@ async def handle_health(_: web.Request) -> web.Response:
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
     if request.path.startswith("/api/"):
+        cors_headers = dict(request.app["cors_headers"])
+        requested_headers = request.headers.get("Access-Control-Request-Headers")
+        if requested_headers:
+            cors_headers["Access-Control-Allow-Headers"] = requested_headers
         if request.method == "OPTIONS":
-            return web.Response(status=204, headers=request.app["cors_headers"])
+            return web.Response(status=204, headers=cors_headers)
         response = await handler(request)
-        response.headers.update(request.app["cors_headers"])
+        response.headers.update(cors_headers)
         return response
     return await handler(request)
 
@@ -162,8 +166,9 @@ def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.A
     app["store"] = MemoStore(data_file)
     app["cors_headers"] = {
         "Access-Control-Allow-Origin": cors_origin,
-        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Max-Age": "600",
     }
     app.router.add_post("/api/sync", handle_sync)
     app.router.add_get("/api/health", handle_health)
