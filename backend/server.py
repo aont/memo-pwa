@@ -9,7 +9,7 @@ from typing import Dict, List
 from aiohttp import web
 
 DEFAULT_DATA_FILE = Path(__file__).parent.parent / "server_data.sqlite3"
-STATIC_DIR = Path(__file__).parent.parent / "docs"
+STATIC_DIR = Path(__file__).parent.parent / "frontend"
 DEFAULT_CORS_ORIGIN = "*"
 
 
