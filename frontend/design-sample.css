@@ -1,0 +1,93 @@
+.design-sample {
+  background: linear-gradient(180deg, #f5f7ff 0%, #f8fafc 20%, #f5f5f7 100%);
+}
+
+.design-sample main {
+  align-items: start;
+}
+
+#memo-list-sample,
+#history-list-sample {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.memo-item-unsynced {
+  border: 1px dashed #f59e0b;
+  background: #fff7ed;
+}
+
+.memo-item-archived {
+  opacity: 0.65;
+}
+
+.state-showcase {
+  margin: 0 2rem 2rem;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  padding: 1.25rem 1.5rem;
+}
+
+.state-showcase h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.state-row {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.state-grid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-chip-progress {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-chip-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-chip-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.history-item-current {
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+}
+
+.history-item-error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+}
+
+@media (max-width: 900px) {
+  .state-showcase {
+    margin: 0 2rem 2rem;
+  }
+}
