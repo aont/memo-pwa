@@ -135,16 +135,15 @@ class MemoStore:
 
 async def handle_api(request: web.Request) -> web.Response:
     payload = await request.json()
-    action = payload.get("action")
-    if action == "health":
-        return web.json_response({"status": "ok"})
-    if action != "sync":
-        return web.json_response({"error": "unknown_action"}, status=400)
     client_memos = payload.get("memos", [])
     client_deleted = payload.get("deletedMemos", [])
     store: MemoStore = request.app["store"]
     response = await store.sync(client_memos, client_deleted)
     return web.json_response(response)
+
+
+async def handle_health(_: web.Request) -> web.Response:
+    return web.json_response({"status": "ok"})
 
 
 @web.middleware
@@ -170,7 +169,8 @@ def create_app(serve_frontend: bool, data_file: Path, cors_origin: str) -> web.A
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Max-Age": "600",
     }
-    app.router.add_post("/api", handle_api)
+    app.router.add_post("/sync", handle_api)
+    app.router.add_get("/health", handle_health)
     if serve_frontend:
         async def handle_index(_: web.Request) -> web.Response:
             return web.FileResponse(STATIC_DIR / "index.html")

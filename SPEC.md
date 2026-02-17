@@ -21,14 +21,14 @@ Provide a simple memo-taking progressive web app that works offline, tracks memo
   - Memos are stored in IndexedDB under a single database.
   - On load, the app restores the last saved state from IndexedDB.
 - **Sync**
-  - Manual sync initiates a `POST /api` request with an action payload.
+  - Manual sync initiates a `POST /sync` request.
   - The client merges server updates and resolves conflicts by creating a copy when needed.
   - Sync status feedback is visible to the user.
 
 ### Server
 
 - **Sync endpoint**
-  - Uses `POST /api` with `{ "action": "sync" }`.
+  - Uses `POST /sync`.
   - Accepts a list of memos from the client.
   - For each memo:
     - Accepts identical histories.
@@ -37,7 +37,7 @@ Provide a simple memo-taking progressive web app that works offline, tracks memo
     - Flags conflicts when histories diverge.
   - Returns any server-only memos.
 - **Health endpoint**
-  - Uses `POST /api` with `{ "action": "health" }`.
+  - Uses `GET /health`.
 
 ## Data model
 

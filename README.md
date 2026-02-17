@@ -38,7 +38,7 @@ The app will be available at `http://localhost:8080`.
 
 ## API
 
-### `POST /api`
+### `POST /sync`
 
 Send local memos and receive reconciliation results.
 
@@ -46,7 +46,6 @@ Send local memos and receive reconciliation results.
 
 ```json
 {
-  "action": "sync",
   "memos": [
     {
       "id": "uuid",
@@ -80,12 +79,86 @@ Send local memos and receive reconciliation results.
 
 ## Health check
 
-### `POST /api`
+### `GET /health`
 
-Send a health check action to confirm the server is running.
+Returns server health status.
+
+**Response body**
 
 ```json
 {
-  "action": "health"
+  "status": "ok"
 }
 ```
+
+
+## Frontend ↔ Backend communication details
+
+### Endpoint address used by frontend
+
+- Sync target is determined by `apiBase` and sent to `fetch(syncEndpoint())`.
+- Default API base is current origin (`window.location.origin`), so with default settings it becomes `http://<frontend-host>:<port>`.
+- You can override the base from the UI (`api-base` input), and the app stores it in `localStorage` key `memo-api-base`.
+- The sync route appends `/sync` to the API base, so practical sync destination is typically `http://<server-host>:<port>/sync`.
+- If frontend API base is set to `https://host/path`, sync goes to `https://host/path/sync`.
+
+### Request payload (frontend → backend)
+
+The frontend sends this JSON via `POST`:
+
+```json
+{
+  "memos": [
+    {
+      "id": "uuid",
+      "title": "Memo title",
+      "history": [
+        {
+          "id": "uuid",
+          "content": "Memo content",
+          "timestamp": "2024-01-01T00:00:00.000Z"
+        }
+      ]
+    }
+  ],
+  "deletedMemos": [
+    {
+      "id": "uuid",
+      "deletedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Response payload (backend → frontend)
+
+The backend returns reconciliation results:
+
+```json
+{
+  "results": [
+    {
+      "id": "uuid",
+      "status": "accepted | update | conflict | deleted",
+      "memo": {}
+    }
+  ],
+  "serverMemos": [
+    {
+      "id": "uuid",
+      "title": "Memo title",
+      "history": []
+    }
+  ],
+  "serverDeleted": [
+    {
+      "id": "uuid",
+      "deletedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Other API endpoint
+
+Health check is a separate endpoint: `GET /health`.

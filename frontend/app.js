@@ -29,13 +29,21 @@ const initialApiBase =
   window.MEMO_API_BASE ||
   defaultApiBase;
 let apiBase = initialApiBase;
-const resolveApiEndpoint = (value) => {
+const resolveApiBase = (value) => {
   const trimmed = value?.trim();
-  const baseValue = trimmed ? trimmed : window.location.origin;
+  const baseValue = trimmed ? trimmed : defaultApiBase;
   const url = new URL(baseValue, window.location.origin);
+  const normalizedPath = url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
+  url.pathname = normalizedPath || "/";
+  return url;
+};
+const resolveApiEndpoint = (value, endpoint) => {
+  const url = resolveApiBase(value);
+  const pathPrefix = url.pathname === "/" ? "" : url.pathname;
+  url.pathname = `${pathPrefix}/${endpoint}`;
   return url.toString();
 };
-const apiEndpoint = () => resolveApiEndpoint(apiBase);
+const syncEndpoint = () => resolveApiEndpoint(apiBase, "sync");
 
 const state = {
   memos: [],
@@ -472,11 +480,10 @@ const applyServerDeletions = (serverDeleted) => {
 const sync = async () => {
   syncStatus.textContent = "Syncing...";
   try {
-    const response = await fetch(apiEndpoint(), {
+    const response = await fetch(syncEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "sync",
         memos: state.memos,
         deletedMemos: state.deletedMemos,
       }),
@@ -511,7 +518,7 @@ const updateServiceWorkerApiEndpoint = async () => {
   if (!("serviceWorker" in navigator)) {
     return;
   }
-  const endpoint = apiEndpoint();
+  const endpoint = syncEndpoint();
   try {
     const registration = await navigator.serviceWorker.ready;
     registration.active?.postMessage({ type: "api-endpoint", endpoint });

@@ -11,7 +11,7 @@ const APP_SHELL = [
 
 const apiConfig = {
   origin: self.location.origin,
-  pathname: "/api",
+  pathname: "/sync",
 };
 
 self.addEventListener("message", (event) => {
