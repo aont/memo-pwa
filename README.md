@@ -98,7 +98,7 @@ Returns server health status.
 
 - Sync target is determined by `apiBase` and sent to `fetch(syncEndpoint())`.
 - Default API base is current origin (`window.location.origin`), so with default settings it becomes `http://<frontend-host>:<port>`.
-- You can override the base from the UI (`api-base` input), and the app stores it in `localStorage` key `memo-api-base`.
+- You can override the base from the UI (`api-base` input), and the app stores it in `localStorage` key `memoPwa.apiBase` (legacy `memo-api-base` is migrated automatically).
 - The sync route appends `/sync` to the API base, so practical sync destination is typically `http://<server-host>:<port>/sync`.
 - If frontend API base is set to `https://host/path`, sync goes to `https://host/path/sync`.
 

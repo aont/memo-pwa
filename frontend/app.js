@@ -21,10 +21,12 @@ const resetStorageButton = document.getElementById("reset-storage");
 const dbName = "memo-pwa";
 const dbVersion = 1;
 const memoStore = "memo-state";
-const apiBaseStorageKey = "memo-api-base";
+const apiBaseStorageKey = "memoPwa.apiBase";
+const legacyApiBaseStorageKey = "memo-api-base";
 const defaultApiBase = window.location.origin;
 const initialApiBase =
   localStorage.getItem(apiBaseStorageKey) ||
+  localStorage.getItem(legacyApiBaseStorageKey) ||
   document.querySelector('meta[name="memo-api-base"]')?.content ||
   window.MEMO_API_BASE ||
   defaultApiBase;
@@ -507,8 +509,10 @@ const applyApiBase = () => {
   apiBase = apiBaseInput.value.trim();
   if (apiBase) {
     localStorage.setItem(apiBaseStorageKey, apiBase);
+    localStorage.removeItem(legacyApiBaseStorageKey);
   } else {
     localStorage.removeItem(apiBaseStorageKey);
+    localStorage.removeItem(legacyApiBaseStorageKey);
   }
   syncStatus.textContent = "API base updated";
   void updateServiceWorkerApiEndpoint();
